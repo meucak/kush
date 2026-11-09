@@ -1,0 +1,50 @@
+[
+  {
+    "id": "0c5b03c4-9219-4e27-8044-710b0aac100e",
+    "senderId": "e1ce2880-460d-4155-ac40-2604a1ed72c9",
+    "senderName": "Kasa (Sunucu)",
+    "deviceType": "linux",
+    "text": "Selam! kush yerel ağı başarıyla bağlandı 🚀✨",
+    "timestamp": 1794249763687
+  },
+  {
+    "id": "a20b53c6-b0d3-4298-8e82-e671635d3c14",
+    "senderId": "84e87971-4595-4027-b898-9f5edb63d011",
+    "senderName": "Android Cihazım",
+    "deviceType": "android",
+    "text": "a",
+    "timestamp": 1794249797632
+  },
+  {
+    "id": "88978148-ddd8-4e67-8f91-8ec4cde6d309",
+    "senderId": "2d6fe3e6-7ce7-4833-a267-0db224f2b741",
+    "senderName": "Linux Cihaz",
+    "deviceType": "linux",
+    "text": "AÖSDNASJNDJÖANSD",
+    "timestamp": 1794249808012
+  },
+  {
+    "id": "5d31e936-d32c-429e-8b1d-c35600f85762",
+    "senderId": "84e87971-4595-4027-b898-9f5edb63d011",
+    "senderName": "Android Cihazım",
+    "deviceType": "android",
+    "text": "Harika calisiyor abiç",
+    "timestamp": 1794249817399
+  },
+  {
+    "id": "a2f378be-a8e8-47fa-8d7c-182042921eaa",
+    "senderId": "84e87971-4595-4027-b898-9f5edb63d011",
+    "senderName": "Android Cihazım",
+    "deviceType": "android",
+    "text": "Hello hello",
+    "timestamp": 1794249825579
+  },
+  {
+    "id": "17f65fe3-bc00-45a4-b5d9-252ec08ce93b",
+    "senderId": "9bfd71f2-13dc-42bf-af67-96021a6fc254",
+    "senderName": "Android Cihazım",
+    "deviceType": "android",
+    "text": "alooo",
+    "timestamp": 1794250665749
+  }
+]

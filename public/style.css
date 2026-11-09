@@ -813,3 +813,66 @@ body.theme-light .icon-moon { display: block; }
   0%, 80%, 100% { transform: scale(0); }
   40% { transform: scale(1); }
 }
+
+/* Header Device Badge */
+.btn-device-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-full);
+  padding: 4px 10px;
+  color: var(--text-primary);
+  font-size: var(--font-xs);
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.btn-device-tag:hover {
+  border-color: var(--accent-primary);
+  background: var(--accent-soft);
+  color: var(--accent-primary);
+}
+
+.btn-device-tag .device-glyph {
+  font-size: 13px;
+}
+
+.btn-device-tag .edit-icon {
+  font-size: 11px;
+  color: var(--text-dim);
+  transition: color var(--transition-fast);
+}
+
+.btn-device-tag:hover .edit-icon {
+  color: var(--accent-primary);
+}
+
+/* Dictation Mic Button */
+.btn-mic {
+  color: var(--text-secondary);
+  transition: all var(--transition-fast);
+  position: relative;
+}
+
+.btn-mic:hover {
+  color: var(--accent-primary);
+  background: var(--accent-soft);
+}
+
+.btn-mic.recording {
+  color: #ff3b30 !important;
+  background: rgba(255, 59, 48, 0.15) !important;
+  border-color: rgba(255, 59, 48, 0.3) !important;
+  animation: micPulse 1.4s infinite ease-in-out;
+}
+
+@keyframes micPulse {
+  0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 59, 48, 0.4); }
+  50% { transform: scale(1.08); box-shadow: 0 0 0 8px rgba(255, 59, 48, 0); }
+  100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 59, 48, 0); }
+}

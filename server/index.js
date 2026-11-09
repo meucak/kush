@@ -8,16 +8,52 @@ const crypto = require('crypto');
 const PORT = process.env.PORT || 8088;
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
 const UPLOADS_DIR = path.join(__dirname, 'uploads');
+const LOGS_DIR = path.join(__dirname, 'logs');
 
 if (!fs.existsSync(UPLOADS_DIR)) {
   fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 }
+if (!fs.existsSync(LOGS_DIR)) {
+  fs.mkdirSync(LOGS_DIR, { recursive: true });
+}
+
+const CHAT_LOG_FILE = path.join(LOGS_DIR, 'chat_history.json');
+const READABLE_LOG_FILE = path.join(LOGS_DIR, 'chat_history.txt');
 
 // In-memory state
 const peers = new Map(); // ws -> { id, name, deviceType, ip, joinedAt, lastSeen }
 const messageHistory = []; // last 150 messages
 const MAX_HISTORY = 150;
 let sharedClipboard = { text: '', sender: 'System', updatedAt: Date.now() };
+
+// Load persisted history on startup
+if (fs.existsSync(CHAT_LOG_FILE)) {
+  try {
+    const raw = fs.readFileSync(CHAT_LOG_FILE, 'utf8');
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) {
+      messageHistory.push(...parsed);
+    }
+  } catch (err) {
+    console.error('Failed to load chat history:', err);
+  }
+}
+
+function persistMessages() {
+  try {
+    fs.writeFileSync(CHAT_LOG_FILE, JSON.stringify(messageHistory, null, 2), 'utf8');
+    const readable = messageHistory.map(m => {
+      const time = new Date(m.timestamp).toLocaleString('tr-TR');
+      if (m.type === 'file') {
+        return `[${time}] ${m.senderName} (${m.deviceType || 'cihaz'}) [DOSYA]: ${m.originalName} (${(m.size / 1024).toFixed(1)} KB) -> /api/download/${m.id}`;
+      }
+      return `[${time}] ${m.senderName} (${m.deviceType || 'cihaz'}): ${m.text}`;
+    }).join('\n');
+    fs.writeFileSync(READABLE_LOG_FILE, readable, 'utf8');
+  } catch (err) {
+    console.error('Failed to persist chat history:', err);
+  }
+}
 
 // MIME lookup
 const MIME_TYPES = {
@@ -82,6 +118,19 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  // --- API: Chat Logs ---
+  if (pathname === '/api/logs/chat' && req.method === 'GET') {
+    if (fs.existsSync(READABLE_LOG_FILE)) {
+      res.writeHead(200, { 'Content-Type': 'text/plain; charset=UTF-8' });
+      fs.createReadStream(READABLE_LOG_FILE).pipe(res);
+      return;
+    } else {
+      res.writeHead(200, { 'Content-Type': 'text/plain; charset=UTF-8' });
+      res.end('Henüz sohbet kaydı bulunmuyor.');
+      return;
+    }
+  }
+
   // --- API: Upload File ---
   if (pathname === '/api/upload' && req.method === 'POST') {
     const rawFileName = req.headers['x-file-name'] || 'file_' + Date.now();
@@ -118,6 +167,18 @@ const server = http.createServer((req, res) => {
         type: 'file_shared',
         file: fileMeta
       });
+
+      // Add to history and persist
+      messageHistory.push({
+        id: fileId,
+        type: 'file',
+        senderName,
+        originalName: fileName,
+        size: bytesReceived,
+        url: fileMeta.url,
+        timestamp: Date.now()
+      });
+      persistMessages();
 
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ success: true, file: fileMeta }));
@@ -305,6 +366,7 @@ wss.on('connection', (ws, req) => {
           };
           messageHistory.push(newMsg);
           if (messageHistory.length > MAX_HISTORY) messageHistory.shift();
+          persistMessages();
           broadcast({ type: 'new_message', message: newMsg });
           break;
 

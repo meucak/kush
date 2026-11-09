@@ -43,6 +43,10 @@
   const uploadProgressBar = document.getElementById('uploadProgressBar');
   const typingIndicator = document.getElementById('typingIndicator');
   const typingText = document.getElementById('typingText');
+  const headerDeviceBtn = document.getElementById('headerDeviceBtn');
+  const headerDeviceName = document.getElementById('headerDeviceName');
+  const headerDeviceIcon = document.getElementById('headerDeviceIcon');
+  const micBtn = document.getElementById('micBtn');
 
   // --- Web Audio API UI Synthesizer (Zero asset overhead) ---
   const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -124,9 +128,34 @@
   selfNameInput.value = myName;
   selfAvatar.textContent = getDeviceIcon(myDeviceType);
 
+  function updateHeaderDeviceTag() {
+    if (headerDeviceName) headerDeviceName.textContent = myName;
+    if (headerDeviceIcon) headerDeviceIcon.textContent = getDeviceIcon(myDeviceType);
+  }
+  updateHeaderDeviceTag();
+
+  if (headerDeviceBtn) {
+    headerDeviceBtn.addEventListener('click', () => {
+      const newName = prompt('Cihazınız için bir ad girin:', myName);
+      if (newName !== null) {
+        const cleanName = newName.trim();
+        if (cleanName) {
+          myName = cleanName;
+          selfNameInput.value = myName;
+          updateHeaderDeviceTag();
+          localStorage.setItem('kush_device_name', myName);
+          if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'identify', name: myName, deviceType: myDeviceType }));
+          }
+        }
+      }
+    });
+  }
+
   selfNameInput.addEventListener('change', () => {
     myName = selfNameInput.value.trim() || detectDefaultName();
     selfNameInput.value = myName;
+    updateHeaderDeviceTag();
     localStorage.setItem('kush_device_name', myName);
     if (ws && ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify({ type: 'identify', name: myName, deviceType: myDeviceType }));
@@ -459,6 +488,82 @@
       console.error('Clipboard copy failed:', err);
     }
   });
+
+  // --- Voice Dictation (Web Speech API) ---
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  let recognition = null;
+  let isRecording = false;
+
+  if (SpeechRecognition) {
+    recognition = new SpeechRecognition();
+    recognition.lang = 'tr-TR';
+    recognition.continuous = true;
+    recognition.interimResults = true;
+
+    recognition.onstart = () => {
+      isRecording = true;
+      if (micBtn) {
+        micBtn.classList.add('recording');
+        micBtn.title = 'Dinleniyor... (Durdurmak için tıklayın)';
+      }
+      playChime('send');
+    };
+
+    recognition.onresult = (event) => {
+      let interim = '';
+      let finalTranscript = '';
+      for (let i = event.resultIndex; i < event.results.length; ++i) {
+        if (event.results[i].isFinal) {
+          finalTranscript += event.results[i][0].transcript;
+        } else {
+          interim += event.results[i][0].transcript;
+        }
+      }
+      if (finalTranscript) {
+        const cur = messageInput.value;
+        const sep = cur && !cur.endsWith(' ') ? ' ' : '';
+        messageInput.value = cur + sep + finalTranscript.trim();
+        messageInput.dispatchEvent(new Event('input'));
+      }
+    };
+
+    recognition.onerror = (event) => {
+      console.warn('Speech recognition error:', event.error);
+      stopRecording();
+    };
+
+    recognition.onend = () => {
+      stopRecording();
+    };
+  }
+
+  function stopRecording() {
+    isRecording = false;
+    if (micBtn) {
+      micBtn.classList.remove('recording');
+      micBtn.title = 'Sesli Dikte (Konuşarak Yaz)';
+    }
+  }
+
+  if (micBtn) {
+    micBtn.addEventListener('click', () => {
+      if (!recognition) {
+        alert('Cihazınızda doğrudan web ses tanıma desteklenmiyor. Klavyenizdeki mikrofon tuşunu kullanabilirsiniz.');
+        return;
+      }
+      if (isRecording) {
+        recognition.stop();
+        stopRecording();
+      } else {
+        try {
+          recognition.start();
+        } catch (err) {
+          console.error('Speech start error:', err);
+          stopRecording();
+        }
+      }
+    });
+  }
 
   // --- Theme Toggle ---
   const currentTheme = localStorage.getItem('kush_theme') || 'theme-dark';
