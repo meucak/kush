@@ -1,7 +1,7 @@
 {
-  "name": "saksogan",
+  "name": "kush",
   "version": "1.0.0",
-  "description": "Ultra-fast, private local network messenger & file drop across Linux, Windows, and Mobile (Saksoğan).",
+  "description": "Ultra-fast, private local network messenger & file drop across Linux, Windows, and Mobile (kush).",
   "main": "server/index.js",
   "scripts": {
     "start": "node server/index.js"

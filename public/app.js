@@ -9,7 +9,7 @@
   let ws = null;
   let myId = null;
   let myIp = null;
-  let myName = localStorage.getItem('saksogan_device_name') || detectDefaultName();
+  let myName = localStorage.getItem('kush_device_name') || detectDefaultName();
   let myDeviceType = detectDeviceType();
   let activePeers = [];
   let isTypingTimeout = null;
@@ -106,7 +106,7 @@
       linux: 'Linux Cihaz',
       mac: 'Mac'
     };
-    return map[type] || 'Saksoğan Cihazı';
+    return map[type] || 'kush Cihazı';
   }
 
   function getDeviceIcon(type) {
@@ -127,7 +127,7 @@
   selfNameInput.addEventListener('change', () => {
     myName = selfNameInput.value.trim() || detectDefaultName();
     selfNameInput.value = myName;
-    localStorage.setItem('saksogan_device_name', myName);
+    localStorage.setItem('kush_device_name', myName);
     if (ws && ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify({ type: 'identify', name: myName, deviceType: myDeviceType }));
     }
@@ -461,14 +461,14 @@
   });
 
   // --- Theme Toggle ---
-  const currentTheme = localStorage.getItem('saksogan_theme') || 'theme-dark';
+  const currentTheme = localStorage.getItem('kush_theme') || 'theme-dark';
   document.body.className = currentTheme;
 
   themeToggle.addEventListener('click', () => {
     const isDark = document.body.classList.contains('theme-dark');
     const newTheme = isDark ? 'theme-light' : 'theme-dark';
     document.body.className = newTheme;
-    localStorage.setItem('saksogan_theme', newTheme);
+    localStorage.setItem('kush_theme', newTheme);
   });
 
   // --- Mobile Sidebar Toggle ---
@@ -484,7 +484,7 @@
 
   // --- Direct APK Download ---
   downloadApkBtn.addEventListener('click', () => {
-    window.location.href = '/download/saksogan.apk';
+    window.location.href = '/download/kush.apk';
   });
 
   // --- System Notifications ---
@@ -494,7 +494,7 @@
 
   function notifyIfBackground(title, body) {
     if (document.hidden && 'Notification' in window && Notification.permission === 'granted') {
-      new Notification(`Saksoğan: ${title}`, {
+      new Notification(`kush: ${title}`, {
         body: body,
         icon: '/icons/icon-192.png'
       });

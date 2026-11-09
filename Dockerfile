@@ -7,8 +7,7 @@ RUN npm install --omit=dev
 
 COPY server ./server
 COPY public ./public
-COPY saksogan.apk ./saksogan.apk
-COPY aura-lan.apk ./aura-lan.apk
+COPY kush.apk ./kush.apk
 
 ENV PORT=8088
 EXPOSE 8088

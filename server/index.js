@@ -72,7 +72,7 @@ const server = http.createServer((req, res) => {
   if (pathname === '/api/info' && req.method === 'GET') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
-      appName: 'Saksoğan',
+      appName: 'kush',
       version: '1.0.0',
       uptime: process.uptime(),
       addresses: getNetworkAddresses(),
@@ -173,14 +173,14 @@ const server = http.createServer((req, res) => {
   }
 
   // --- API: Direct APK Download ---
-  if (pathname === '/download/saksogan.apk' || pathname === '/download/aura.apk' || pathname === '/download/app.apk') {
-    const apkPath = path.join(__dirname, '..', 'saksogan.apk');
+  if (pathname === '/download/kush.apk' || pathname === '/download/saksogan.apk' || pathname === '/download/aura.apk' || pathname === '/download/app.apk') {
+    const apkPath = path.join(__dirname, '..', 'kush.apk');
     if (fs.existsSync(apkPath)) {
       const stat = fs.statSync(apkPath);
       res.writeHead(200, {
         'Content-Type': 'application/vnd.android.package-archive',
         'Content-Length': stat.size,
-        'Content-Disposition': 'attachment; filename="Saksogan.apk"'
+        'Content-Disposition': 'attachment; filename="kush.apk"'
       });
       fs.createReadStream(apkPath).pipe(res);
       return;
@@ -369,7 +369,7 @@ setInterval(() => {
 
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`====================================================`);
-  console.log(` Saksoğan Server running on port ${PORT}`);
+  console.log(` kush Server running on port ${PORT}`);
   console.log(` Local Addresses:`);
   getNetworkAddresses().forEach(addr => {
     console.log(`  -> http://${addr.address}:${PORT} (${addr.iface})`);

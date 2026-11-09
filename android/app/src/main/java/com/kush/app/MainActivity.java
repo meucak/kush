@@ -1,4 +1,4 @@
-package com.auranexus.lan;
+package com.kush.app;
 
 import android.app.Activity;
 import android.app.AlertDialog;
@@ -7,8 +7,10 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.net.Uri;
 import android.os.Bundle;
+import android.util.Log;
 import android.view.KeyEvent;
 import android.view.View;
+import android.webkit.ConsoleMessage;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceError;
@@ -19,27 +21,41 @@ import android.webkit.WebViewClient;
 import android.widget.EditText;
 import android.widget.Toast;
 
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.util.concurrent.atomic.AtomicBoolean;
+
 public class MainActivity extends Activity {
 
+    private static final String TAG = "kush";
     private WebView mWebView;
     private ValueCallback<Uri[]> mFilePathCallback;
     private static final int FILE_CHOOSER_REQUEST_CODE = 1001;
-    private static final String PREFS_NAME = "SaksoganPrefs";
+    private static final String PREFS_NAME = "KushPrefs";
     private static final String KEY_SERVER_URL = "server_url";
-    private static final String DEFAULT_SERVER_URL = "http://100.69.155.110:8088";
+    private static final String DEFAULT_SERVER_URL = "http://192.168.1.27:8088";
+
+    // Ranked candidate endpoints
+    private static final String[] CANDIDATE_URLS = new String[]{
+        "http://192.168.1.27:8088",   // Toshi Wi-Fi relay (fastest on home Wi-Fi)
+        "http://100.69.155.110:8088",  // Kasa direct Tailscale IP
+        "http://192.168.1.102:8088"   // Kasa Ethernet direct
+    };
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        Log.d(TAG, "onCreate initiated");
 
         mWebView = new WebView(this);
         setContentView(mWebView);
 
         setupWebView();
-        loadCurrentServer();
+        discoverAndConnect(false);
     }
 
     private void setupWebView() {
+        WebView.setWebContentsDebuggingEnabled(true);
         WebSettings settings = mWebView.getSettings();
         settings.setJavaScriptEnabled(true);
         settings.setDomStorageEnabled(true);
@@ -53,7 +69,7 @@ public class MainActivity extends Activity {
 
         // Modern User Agent
         String defaultUa = settings.getUserAgentString();
-        settings.setUserAgentString(defaultUa + " SaksoganNative/1.0");
+        settings.setUserAgentString(defaultUa + " KushNative/1.0");
 
         mWebView.setWebViewClient(new WebViewClient() {
             @Override
@@ -74,12 +90,19 @@ public class MainActivity extends Activity {
             @Override
             public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
                 if (request.isForMainFrame()) {
-                    showServerConfigDialog("Sunucuya bağlanılamadı. Lütfen sunucu IP adresini kontrol edin:");
+                    Log.w(TAG, "Main frame failed to load: " + error.getDescription());
+                    discoverAndConnect(true);
                 }
             }
         });
 
         mWebView.setWebChromeClient(new WebChromeClient() {
+            @Override
+            public boolean onConsoleMessage(ConsoleMessage consoleMessage) {
+                Log.d(TAG, "[Console] " + consoleMessage.message() + " (" + consoleMessage.sourceId() + ":" + consoleMessage.lineNumber() + ")");
+                return true;
+            }
+
             @Override
             public boolean onShowFileChooser(WebView webView, ValueCallback<Uri[]> filePathCallback,
                                             FileChooserParams fileChooserParams) {
@@ -101,10 +124,56 @@ public class MainActivity extends Activity {
         });
     }
 
-    private void loadCurrentServer() {
-        SharedPreferences prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
-        String serverUrl = prefs.getString(KEY_SERVER_URL, DEFAULT_SERVER_URL);
-        mWebView.loadUrl(serverUrl);
+    private void discoverAndConnect(final boolean forcePromptOnFail) {
+        Log.d(TAG, "Starting parallel candidate probe...");
+        final AtomicBoolean found = new AtomicBoolean(false);
+
+        for (final String candidate : CANDIDATE_URLS) {
+            new Thread(new Runnable() {
+                @Override
+                public void run() {
+                    try {
+                        URL u = new URL(candidate + "/api/info");
+                        HttpURLConnection conn = (HttpURLConnection) u.openConnection();
+                        conn.setConnectTimeout(1200);
+                        conn.setReadTimeout(1200);
+                        conn.setRequestMethod("GET");
+                        int code = conn.getResponseCode();
+                        conn.disconnect();
+                        Log.d(TAG, "Candidate " + candidate + " HTTP code: " + code);
+
+                        if (code == 200 && found.compareAndSet(false, true)) {
+                            runOnUiThread(new Runnable() {
+                                @Override
+                                public void run() {
+                                    Log.i(TAG, "Successfully connected to: " + candidate);
+                                    SharedPreferences prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
+                                    prefs.edit().putString(KEY_SERVER_URL, candidate).apply();
+                                    mWebView.loadUrl(candidate);
+                                }
+                            });
+                        }
+                    } catch (Exception e) {
+                        Log.d(TAG, "Candidate " + candidate + " error: " + e.getMessage());
+                    }
+                }
+            }).start();
+        }
+
+        // Safety fallback timer if none responded after 2.5 seconds
+        mWebView.postDelayed(new Runnable() {
+            @Override
+            public void run() {
+                if (!found.get()) {
+                    if (forcePromptOnFail) {
+                        showServerConfigDialog("Sunucuya otomatik bağlanılamadı. Lütfen sunucu IP adresini girin:");
+                    } else {
+                        // Try default
+                        mWebView.loadUrl(DEFAULT_SERVER_URL);
+                    }
+                }
+            }
+        }, 2500);
     }
 
     private void showServerConfigDialog(String promptMessage) {
@@ -116,7 +185,7 @@ public class MainActivity extends Activity {
         input.setSelection(input.getText().length());
 
         new AlertDialog.Builder(this)
-            .setTitle("Saksoğan Sunucu Ayarı")
+            .setTitle("kush Sunucu Ayarı")
             .setMessage(promptMessage)
             .setView(input)
             .setPositiveButton("Bağlan", new DialogInterface.OnClickListener() {
@@ -131,12 +200,10 @@ public class MainActivity extends Activity {
                 }
             })
             .setNegativeButton("İptal", null)
-            .setNeutralButton("Tailscale IP Kullan", new DialogInterface.OnClickListener() {
+            .setNeutralButton("Yeniden Tara", new DialogInterface.OnClickListener() {
                 @Override
                 public void onClick(DialogInterface dialog, int which) {
-                    String tsUrl = "http://100.69.155.110:8088";
-                    prefs.edit().putString(KEY_SERVER_URL, tsUrl).apply();
-                    mWebView.loadUrl(tsUrl);
+                    discoverAndConnect(true);
                 }
             })
             .show();
@@ -172,7 +239,7 @@ public class MainActivity extends Activity {
                 mWebView.goBack();
                 return true;
             } else {
-                showServerConfigDialog("Sunucu adresini değiştirmek veya yeniden bağlanmak ister misiniz?");
+                showServerConfigDialog("Sunucu adresini değiştirmek veya yeniden taranmasını ister misiniz?");
                 return true;
             }
         }

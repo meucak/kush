@@ -1,12 +1,13 @@
 services:
-  aura-lan:
+  kush:
     build: .
-    container_name: aura-lan
+    container_name: kush
     restart: unless-stopped
     ports:
       - "8088:8088"
     volumes:
       - ./server/uploads:/app/server/uploads
+      - ./kush.apk:/app/kush.apk:ro
       - ./saksogan.apk:/app/saksogan.apk:ro
       - ./aura-lan.apk:/app/aura-lan.apk:ro
     environment:

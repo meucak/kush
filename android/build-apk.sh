@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -e
 
-echo "=== AURA LAN APK COMPILATION PIPELINE ==="
+echo "=== KUSH APK COMPILATION PIPELINE ==="
 export ANDROID_HOME=/opt/android-sdk
 mkdir -p "$ANDROID_HOME/cmdline-tools"
 
@@ -31,9 +31,11 @@ mkdir -p "$BUILD_DIR/obj" "$BUILD_DIR/compiled"
 echo "Compiling Android resources with aapt2..."
 "$BUILD_TOOLS/aapt2" compile --dir "$WORK_DIR/res" -o "$BUILD_DIR/compiled/resources.zip"
 
-echo "Linking resources with aapt2..."
+echo "Linking resources with aapt2 (minSdkVersion 24, targetSdkVersion 33)..."
 "$BUILD_TOOLS/aapt2" link -I "$PLATFORM/android.jar" \
     --manifest "$WORK_DIR/AndroidManifest.xml" \
+    --min-sdk-version 24 \
+    --target-sdk-version 33 \
     -o "$BUILD_DIR/unaligned.apk" \
     "$BUILD_DIR/compiled/resources.zip" \
     --auto-add-overlay
@@ -42,13 +44,13 @@ echo "Compiling Java sources..."
 javac -cp "$PLATFORM/android.jar" \
     -d "$BUILD_DIR/obj" \
     -source 17 -target 17 \
-    "$WORK_DIR/java/com/auranexus/lan/MainActivity.java"
+    "$WORK_DIR/java/com/kush/app/MainActivity.java"
 
 echo "Desugaring & converting classes to DEX with d8..."
 "$BUILD_TOOLS/d8" --output "$BUILD_DIR" \
     --lib "$PLATFORM/android.jar" \
-    "$BUILD_DIR/obj/com/auranexus/lan/MainActivity.class" \
-    "$BUILD_DIR/obj/com/auranexus/lan/MainActivity\$"*.class 2>/dev/null || true
+    "$BUILD_DIR/obj/com/kush/app/MainActivity.class" \
+    "$BUILD_DIR/obj/com/kush/app/MainActivity\$"*.class 2>/dev/null || true
 
 echo "Packaging classes.dex into APK..."
 cd "$BUILD_DIR"
@@ -57,19 +59,23 @@ zip -uj unaligned.apk classes.dex
 echo "Aligning APK with zipalign..."
 "$BUILD_TOOLS/zipalign" -v -p 4 unaligned.apk aligned.apk
 
-echo "Generating release keystore..."
-keytool -genkey -v -keystore debug.keystore -alias debug -keyalg RSA -keysize 2048 -validity 10000 \
-    -storepass android -keypass android -dname "CN=Aura,OU=Aura,O=Aura,L=Istanbul,ST=Istanbul,C=TR"
+KEYSTORE="/workspace/android/kush.keystore"
+if [ ! -f "$KEYSTORE" ]; then
+    echo "Creating persistent release keystore at $KEYSTORE..."
+    keytool -genkey -v -keystore "$KEYSTORE" -alias kush -keyalg RSA -keysize 2048 -validity 10000 \
+        -storepass kushpass -keypass kushpass -dname "CN=kush,OU=kush,O=kush,L=Istanbul,ST=Istanbul,C=TR"
+fi
 
 echo "Signing APK with apksigner..."
-"$BUILD_TOOLS/apksigner" sign --ks debug.keystore \
-    --ks-pass pass:android --key-pass pass:android \
-    --out /workspace/saksogan.apk aligned.apk
+"$BUILD_TOOLS/apksigner" sign --ks "$KEYSTORE" \
+    --ks-pass pass:kushpass --key-pass pass:kushpass \
+    --out /workspace/kush.apk aligned.apk
 
-cp /workspace/saksogan.apk /workspace/aura-lan.apk
+cp /workspace/kush.apk /workspace/saksogan.apk
+cp /workspace/kush.apk /workspace/aura-lan.apk
 
 echo "Verifying signed APK..."
-"$BUILD_TOOLS/apksigner" verify --verbose /workspace/saksogan.apk
+"$BUILD_TOOLS/apksigner" verify --verbose /workspace/kush.apk
 
-echo "=== SUCCESS! APK built at /workspace/saksogan.apk ==="
-ls -lh /workspace/saksogan.apk
+echo "=== SUCCESS! APK built at /workspace/kush.apk ==="
+ls -lh /workspace/kush.apk
