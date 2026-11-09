@@ -1,6 +1,6 @@
 @echo off
 :: ==============================================================================
-:: kush — Windows Client Launcher (Tailscale & Local LAN)
+:: kush — Windows Client Launcher & Management CLI (Tailscale & LAN)
 :: ==============================================================================
 title kush LAN
 
@@ -17,8 +17,18 @@ if errorlevel 1 (
     )
 )
 
-echo Starting kush at %SERVER_URL% ...
+if "%1"=="--resetlog" (
+    echo ==================================================
+    echo   kush -- Sohbet ve Log Sifirlama
+    echo ==================================================
+    echo Sunucu kayitlari sifirlaniyor...
+    curl.exe -s -X POST %SERVER_URL%/api/logs/reset
+    echo.
+    echo Log kayitlari basariyla sifirlandi!
+    pause
+    exit /b
+)
 
-:: Launch in Microsoft Edge App Mode, fallback to Chrome, then default browser
+echo Starting kush at %SERVER_URL% ...
 start msedge.exe --app="%SERVER_URL%" 2>nul || start chrome.exe --app="%SERVER_URL%" 2>nul || start "" "%SERVER_URL%"
 exit

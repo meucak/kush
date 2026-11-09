@@ -8,6 +8,8 @@ services:
     volumes:
       - ./server/uploads:/app/server/uploads
       - ./server/logs:/app/server/logs
+      - ./public:/app/public
+      - ./server:/app/server
       - ./kush.apk:/app/kush.apk:ro
       - ./saksogan.apk:/app/saksogan.apk:ro
       - ./aura-lan.apk:/app/aura-lan.apk:ro

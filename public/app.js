@@ -1,5 +1,5 @@
 // ==============================================================================
-// kush — Reactive LAN & Tailscale Client (Clean, Fast & Apple HIG)
+// kush — Reactive LAN & Tailscale Client (Offline-First, Zero-CPU, Apple HIG)
 // ==============================================================================
 
 (function() {
@@ -10,11 +10,12 @@
   let myId = null;
   let myIp = null;
   
-  // Persistent Client UUID across reloads / sessions (ensures own messages are ALWAYS on the right)
-  let myClientId = localStorage.getItem('kush_client_id');
-  if (!myClientId) {
-    myClientId = 'c_' + Math.random().toString(36).substring(2, 11) + '_' + Date.now();
-    localStorage.setItem('kush_client_id', myClientId);
+  // Persistent Device / Client Tag across sessions
+  let myClientTag = localStorage.getItem('kush_client_tag') || localStorage.getItem('kush_client_id');
+  if (!myClientTag) {
+    myClientTag = 'tag_' + detectDeviceType() + '_' + Math.random().toString(36).substring(2, 9) + '_' + Date.now();
+    localStorage.setItem('kush_client_tag', myClientTag);
+    localStorage.setItem('kush_client_id', myClientTag);
   }
 
   let myDeviceType = detectDeviceType();
@@ -23,6 +24,14 @@
   let activePeers = [];
   let isTypingTimeout = null;
   let lastMessageDateStr = null;
+
+  // Local Offline Outbox (kept only when offline/unreachable)
+  let offlineQueue = [];
+  try {
+    offlineQueue = JSON.parse(localStorage.getItem('kush_offline_queue') || '[]');
+  } catch (e) {
+    offlineQueue = [];
+  }
 
   // --- DOM Elements ---
   const messagesContainer = document.getElementById('messagesContainer');
@@ -60,7 +69,7 @@
   const lightboxDownloadBtn = document.getElementById('lightboxDownloadBtn');
   const lightboxCloseBtn = document.getElementById('lightboxCloseBtn');
 
-  // --- Web Audio Chime (Ephemeral / Zero Continuous CPU) ---
+  // --- Ephemeral Web Audio Chime (Zero Background CPU) ---
   function playChime(type) {
     if (isMuted) return;
     try {
@@ -164,11 +173,11 @@
     selfNameInput.value = myName;
     localStorage.setItem('kush_device_name', myName);
     if (ws && ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ type: 'identify', clientId: myClientId, name: myName, deviceType: myDeviceType }));
+      ws.send(JSON.stringify({ type: 'identify', clientTag: myClientTag, clientId: myClientTag, name: myName, deviceType: myDeviceType }));
     }
   });
 
-  // --- WebSocket Connection ---
+  // --- WebSocket Connection & Offline Queue Flush ---
   function connect() {
     const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsUrl = `${protocol}//${location.host}/ws`;
@@ -180,10 +189,14 @@
       updateStatus('connected', 'Bağlandı');
       ws.send(JSON.stringify({
         type: 'identify',
-        clientId: myClientId,
+        clientTag: myClientTag,
+        clientId: myClientTag,
         name: myName,
         deviceType: myDeviceType
       }));
+
+      // Flush local outbox queue when connected
+      flushOfflineQueue();
     };
 
     ws.onmessage = event => {
@@ -211,12 +224,34 @@
     connectionStatus.querySelector('.status-text').textContent = label;
   }
 
+  function flushOfflineQueue() {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    if (offlineQueue.length === 0) return;
+
+    const itemsToSend = [...offlineQueue];
+    offlineQueue = [];
+    localStorage.removeItem('kush_offline_queue');
+
+    itemsToSend.forEach(item => {
+      ws.send(JSON.stringify({
+        type: 'chat_message',
+        id: item.id,
+        clientTag: myClientTag,
+        clientId: myClientTag,
+        text: item.text,
+        timestamp: item.timestamp
+      }));
+    });
+  }
+
   function handleServerMessage(data) {
     switch (data.type) {
       case 'init':
         myId = data.yourId;
         myIp = data.yourIp;
         selfIp.textContent = myIp;
+        messagesContainer.innerHTML = '';
+        lastMessageDateStr = null;
         if (data.history && data.history.length > 0) {
           clearWelcome();
           data.history.forEach(item => {
@@ -227,6 +262,14 @@
             }
           });
           scrollToBottom();
+        } else {
+          messagesContainer.innerHTML = `
+            <div class="chat-welcome">
+              <div class="welcome-glyph">✨</div>
+              <h2>kush</h2>
+              <p>Yerel ağ veya Tailscale üzerindeki tüm cihazlarınızla doğrudan ve anında dosya, pano ve mesajlaşın.</p>
+            </div>
+          `;
         }
         if (data.clipboard) updateClipboardView(data.clipboard);
         break;
@@ -237,12 +280,25 @@
         break;
 
       case 'new_message':
-        clearWelcome();
-        appendMessage(data.message);
-        scrollToBottom();
-        if (!checkIsSelf(data.message)) {
-          playChime('receive');
-          notifyIfBackground(data.message.senderName, data.message.text);
+        const clientMsgId = data.clientMsgId || data.message.id;
+        const existingBubble = document.querySelector(`[data-msg-id="${clientMsgId}"]`);
+
+        if (existingBubble) {
+          // Delivered confirmation (single tick -> double tick)
+          const tickEl = existingBubble.querySelector('.msg-check');
+          if (tickEl) {
+            tickEl.className = 'msg-check delivered';
+            tickEl.textContent = '✓✓';
+            tickEl.title = 'İletildi';
+          }
+        } else {
+          clearWelcome();
+          appendMessage(data.message);
+          scrollToBottom();
+          if (!checkIsSelf(data.message)) {
+            playChime('receive');
+            notifyIfBackground(data.message.senderName, data.message.text);
+          }
         }
         break;
 
@@ -254,6 +310,16 @@
           playChime('receive');
           notifyIfBackground(data.file.senderName, `Dosya paylaştı: ${data.file.originalName}`);
         }
+        break;
+
+      case 'chat_cleared':
+        messagesContainer.innerHTML = `
+          <div class="chat-welcome">
+            <div class="welcome-glyph">✨</div>
+            <h2>kush</h2>
+            <p>Sohbet ve log kayıtları sıfırlandı.</p>
+          </div>
+        `;
         break;
 
       case 'peer_typing':
@@ -274,12 +340,26 @@
     }
   }
 
-  // --- Identity Evaluation (WhatsApp / Instagram DM Right-Left Alignment) ---
+  // --- Identity & Alignment (Self is on Right, Both for Past & Present) ---
   function checkIsSelf(item) {
     if (!item) return false;
-    if (item.senderClientId && item.senderClientId === myClientId) return true;
+    // 1. Direct persistent client tag/ID match
+    if (item.clientTag && item.clientTag === myClientTag) return true;
+    if (item.senderClientId && item.senderClientId === myClientTag) return true;
     if (item.senderId && item.senderId === myId) return true;
-    if (item.senderName && item.senderName === myName) return true;
+    // 2. Exact sender name match
+    if (item.senderName && item.senderName.trim().toLowerCase() === myName.trim().toLowerCase()) return true;
+    // 3. Historical deviceType fallback (on phone, past android msgs are on right; on Toshi, past linux msgs are on right)
+    if (myDeviceType === 'android') {
+      if (item.deviceType === 'android') return true;
+      if (item.senderName && item.senderName.toLowerCase().includes('android')) return true;
+    } else if (myDeviceType === 'linux') {
+      if (item.deviceType === 'linux') return true;
+      if (item.senderName && (item.senderName.toLowerCase().includes('linux') || item.senderName.toLowerCase().includes('toshi'))) return true;
+    } else if (myDeviceType === 'windows') {
+      if (item.deviceType === 'windows') return true;
+      if (item.senderName && (item.senderName.toLowerCase().includes('windows') || item.senderName.toLowerCase().includes('quasimodo'))) return true;
+    }
     return false;
   }
 
@@ -293,7 +373,7 @@
     peerCountBadge.textContent = activePeers.length;
 
     activePeers.forEach(peer => {
-      const isMe = peer.id === myId || peer.clientId === myClientId;
+      const isMe = peer.id === myId || peer.clientId === myClientTag || peer.clientTag === myClientTag;
       const li = document.createElement('li');
       li.className = 'peer-item';
       li.innerHTML = `
@@ -326,16 +406,25 @@
     }
   }
 
-  // Append Standard Text Message (Self right, Peer left)
+  // Append Standard Text Message
   function appendMessage(msg) {
     appendDateDividerIfNeeded(msg.timestamp);
 
     const isSelf = checkIsSelf(msg);
     const row = document.createElement('div');
     row.className = `msg-row ${isSelf ? 'self' : 'peer'}`;
+    if (msg.id) row.setAttribute('data-msg-id', msg.id);
 
     const timeFormatted = new Date(msg.timestamp || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    const checkmarkHtml = isSelf ? `<span class="msg-check" title="İletildi">✓✓</span>` : '';
+    
+    let checkmarkHtml = '';
+    if (isSelf) {
+      if (msg.isPending) {
+        checkmarkHtml = `<span class="msg-check pending" title="Gönderiliyor / Çevrimdışı">✓</span>`;
+      } else {
+        checkmarkHtml = `<span class="msg-check delivered" title="İletildi">✓✓</span>`;
+      }
+    }
 
     row.innerHTML = `
       ${!isSelf ? `<span class="msg-sender">${escapeHtml(msg.senderName)}</span>` : ''}
@@ -351,37 +440,82 @@
     messagesContainer.appendChild(row);
   }
 
+  // Helper for file extension badge and color category
+  function getFileExtInfo(fileName, mimeType) {
+    const ext = (fileName.split('.').pop() || '').toLowerCase();
+    const isImage = (mimeType && mimeType.startsWith('image/')) || ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp'].includes(ext);
+    
+    let badge = ext.toUpperCase().slice(0, 4) || 'FILE';
+    let typeClass = 'default';
+
+    if (isImage) {
+      typeClass = 'image';
+      badge = 'IMG';
+    } else if (['pdf'].includes(ext)) {
+      typeClass = 'pdf';
+      badge = 'PDF';
+    } else if (['zip', 'rar', '7z', 'tar', 'gz'].includes(ext)) {
+      typeClass = 'zip';
+      badge = 'ZIP';
+    } else if (['doc', 'docx', 'odt', 'txt', 'rtf', 'md'].includes(ext)) {
+      typeClass = 'doc';
+      badge = 'DOC';
+    } else if (['xls', 'xlsx', 'csv'].includes(ext)) {
+      typeClass = 'sheet';
+      badge = 'XLS';
+    } else if (['mp3', 'wav', 'ogg', 'm4a', 'flac'].includes(ext)) {
+      typeClass = 'audio';
+      badge = 'AUDIO';
+    } else if (['mp4', 'mkv', 'avi', 'mov', 'webm'].includes(ext)) {
+      typeClass = 'video';
+      badge = 'VIDEO';
+    } else if (['js', 'ts', 'py', 'sh', 'json', 'html', 'css', 'c', 'cpp', 'java'].includes(ext)) {
+      typeClass = 'code';
+      badge = 'CODE';
+    }
+
+    return { ext, isImage, badge, typeClass };
+  }
+
   // Append File Card
   function appendFileCard(file) {
+    if (!file) return;
     appendDateDividerIfNeeded(file.uploadedAt || file.timestamp);
 
     const isSelf = checkIsSelf(file);
     const row = document.createElement('div');
     row.className = `msg-row ${isSelf ? 'self' : 'peer'}`;
+    if (file.id) row.setAttribute('data-msg-id', file.id);
 
+    const rawFileName = file.originalName || file.name || file.storageName || 'paylasilan_dosya';
+    const fileName = escapeHtml(rawFileName);
     const sizeFormatted = formatFileSize(file.size || 0);
     const timeFormatted = new Date(file.uploadedAt || file.timestamp || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    const checkmarkHtml = isSelf ? `<span class="msg-check" title="İletildi">✓✓</span>` : '';
-    const isImage = (file.mimeType && file.mimeType.startsWith('image/')) || /\.(png|jpe?g|gif|webp|svg)$/i.test(file.originalName);
+    const checkmarkHtml = isSelf ? `<span class="msg-check delivered" title="İletildi">✓✓</span>` : '';
+    
+    const fileUrl = file.url || '';
+    const absoluteUrl = fileUrl.startsWith('http') ? fileUrl : (window.location.origin + fileUrl);
+    
+    const fileInfo = getFileExtInfo(rawFileName, file.mimeType);
 
     let previewHtml = '';
-    if (isImage) {
-      previewHtml = `<img src="${file.url}" class="img-preview" alt="${escapeHtml(file.originalName)}" loading="lazy" data-filename="${escapeHtml(file.originalName)}">`;
+    if (fileInfo.isImage && fileUrl) {
+      previewHtml = `<img src="${fileUrl}" class="img-preview" alt="${fileName}" loading="lazy" data-filename="${fileName}">`;
     }
 
     row.innerHTML = `
-      ${!isSelf ? `<span class="msg-sender">${escapeHtml(file.senderName)}</span>` : ''}
+      ${!isSelf ? `<span class="msg-sender">${escapeHtml(file.senderName || 'Ağdaki Cihaz')}</span>` : ''}
       <div class="msg-bubble">
-        <div class="file-card">
-          <div class="file-icon">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg>
+        <div class="file-card file-${fileInfo.typeClass}">
+          <div class="file-icon file-badge-${fileInfo.typeClass}">
+            <span class="file-ext-badge">${escapeHtml(fileInfo.badge)}</span>
           </div>
           <div class="file-info">
-            <span class="file-name" title="${escapeHtml(file.originalName)}">${escapeHtml(file.originalName)}</span>
+            <span class="file-name" title="${fileName}">${fileName}</span>
             <span class="file-size">${sizeFormatted}</span>
           </div>
-          <a href="${file.url}" download="${escapeHtml(file.originalName)}" class="file-download-btn" title="İndir">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+          <a href="${absoluteUrl}" download="${fileName}" class="file-download-btn" title="İndir: ${fileName}">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
           </a>
         </div>
         ${previewHtml}
@@ -392,11 +526,11 @@
       </div>
     `;
 
-    if (isImage) {
+    if (fileInfo.isImage) {
       const img = row.querySelector('.img-preview');
       if (img) {
         img.addEventListener('click', () => {
-          openLightbox(file.url, file.originalName);
+          openLightbox(fileUrl, rawFileName);
         });
       }
     }
@@ -447,24 +581,52 @@
     messagesContainer.scrollTop = messagesContainer.scrollHeight;
   }
 
-  // --- Message Sending & Typing ---
+  // --- Offline-First Message Sending ---
   function sendMessage() {
     const text = messageInput.value.trim();
-    if (!text || !ws || ws.readyState !== WebSocket.OPEN) return;
+    if (!text) return;
 
-    ws.send(JSON.stringify({
-      type: 'chat_message',
-      clientId: myClientId,
-      text: text
-    }));
+    const msgId = 'm_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
+    const isConnected = ws && ws.readyState === WebSocket.OPEN;
 
-    playChime('send');
+    const localMsg = {
+      id: msgId,
+      clientTag: myClientTag,
+      senderClientId: myClientTag,
+      senderName: myName,
+      deviceType: myDeviceType,
+      text: text,
+      timestamp: Date.now(),
+      isPending: !isConnected
+    };
+
+    // Immediately render in chat
+    clearWelcome();
+    appendMessage(localMsg);
+    scrollToBottom();
+
     messageInput.value = '';
     messageInput.style.height = 'auto';
 
+    if (isConnected) {
+      ws.send(JSON.stringify({
+        type: 'chat_message',
+        id: msgId,
+        clientTag: myClientTag,
+        clientId: myClientTag,
+        text: text,
+        timestamp: localMsg.timestamp
+      }));
+      playChime('send');
+    } else {
+      // Store in local outbox queue until connected
+      offlineQueue.push(localMsg);
+      localStorage.setItem('kush_offline_queue', JSON.stringify(offlineQueue));
+    }
+
     if (isTypingTimeout) {
       clearTimeout(isTypingTimeout);
-      ws.send(JSON.stringify({ type: 'typing', isTyping: false }));
+      if (isConnected) ws.send(JSON.stringify({ type: 'typing', isTyping: false }));
     }
   }
 
@@ -482,7 +644,6 @@
     messageInput.style.height = Math.min(messageInput.scrollHeight, 120) + 'px';
 
     if (ws && ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ type: 'typing', isTyping: true }));
       clearTimeout(isTypingTimeout);
       isTypingTimeout = setTimeout(() => {
         ws.send(JSON.stringify({ type: 'typing', isTyping: false }));
@@ -508,7 +669,9 @@
       xhr.setRequestHeader('X-File-Name', encodeURIComponent(file.name));
       xhr.setRequestHeader('X-File-Type', file.type || 'application/octet-stream');
       xhr.setRequestHeader('X-Sender-Name', encodeURIComponent(myName));
-      xhr.setRequestHeader('X-Client-Id', myClientId);
+      xhr.setRequestHeader('X-Client-Id', myClientTag);
+      xhr.setRequestHeader('X-Client-Tag', myClientTag);
+      xhr.setRequestHeader('X-Device-Type', myDeviceType);
 
       uploadProgressCard.classList.remove('hidden');
       uploadFileName.textContent = file.name;
@@ -544,7 +707,9 @@
   // Drag & Drop Handlers
   window.addEventListener('dragover', e => {
     e.preventDefault();
-    dragOverlay.classList.remove('hidden');
+    if (dragOverlay.classList.contains('hidden')) {
+      dragOverlay.classList.remove('hidden');
+    }
   });
 
   dragOverlay.addEventListener('dragleave', e => {

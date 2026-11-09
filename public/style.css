@@ -637,8 +637,17 @@ body.theme-light .icon-moon { display: block; }
   align-items: center;
   font-size: 11px;
   font-weight: 700;
-  letter-spacing: -2px;
+  user-select: none;
+  margin-left: 2px;
+}
+
+.msg-check.pending {
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.msg-check.delivered {
   color: #38bdf8;
+  letter-spacing: -2px;
 }
 
 /* Voice Message Bubble (WhatsApp style) */
@@ -759,76 +768,103 @@ body.theme-light .icon-moon { display: block; }
   background: var(--bg-surface-elevated);
 }
 
-/* File Attachment Card inside Chat */
+/* File Attachment Card inside Chat (Apple HIG & Anti-Slop) */
 .file-card {
   display: flex;
   align-items: center;
-  gap: var(--space-sm);
+  gap: 12px;
   padding: 10px 14px;
-  background: var(--bg-surface-elevated);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-  margin-top: var(--space-2xs);
-  min-width: 220px;
+  border-radius: 12px;
+  margin-top: 4px;
+  min-width: 230px;
+  max-width: 100%;
+  box-sizing: border-box;
+  transition: transform var(--transition-fast), background var(--transition-fast);
+}
+
+.msg-row.peer .file-card {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: #f5f6fa;
 }
 
 .msg-row.self .file-card {
-  background: rgba(255, 255, 255, 0.15);
-  border-color: rgba(255, 255, 255, 0.2);
-  color: #fff;
+  background: rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  color: #ffffff;
 }
 
 .file-icon {
-  width: 36px;
-  height: 36px;
-  border-radius: var(--radius-sm);
-  background: var(--accent-soft);
-  color: var(--accent-primary);
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  font-weight: 700;
+  user-select: none;
 }
 
-.msg-row.self .file-icon {
-  background: rgba(255, 255, 255, 0.25);
-  color: #fff;
+/* File badge color categories */
+.file-badge-pdf { background: #ef4444; color: #ffffff; }
+.file-badge-image { background: #8b5cf6; color: #ffffff; }
+.file-badge-doc { background: #3b82f6; color: #ffffff; }
+.file-badge-sheet { background: #10b981; color: #ffffff; }
+.file-badge-zip { background: #f59e0b; color: #ffffff; }
+.file-badge-code { background: #06b6d4; color: #ffffff; }
+.file-badge-audio { background: #ec4899; color: #ffffff; }
+.file-badge-video { background: #f43f5e; color: #ffffff; }
+.file-badge-default { background: rgba(255, 255, 255, 0.25); color: #ffffff; }
+
+.file-ext-badge {
+  font-size: 11px;
+  letter-spacing: 0.5px;
 }
 
 .file-info {
   display: flex;
   flex-direction: column;
   flex: 1;
+  min-width: 0;
   overflow: hidden;
+  gap: 2px;
 }
 
 .file-name {
-  font-size: 13px;
+  font-size: 13.5px;
   font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  color: inherit;
 }
 
 .file-size {
   font-size: 11px;
-  color: var(--text-dim);
-}
-
-.msg-row.self .file-size {
-  color: rgba(255, 255, 255, 0.75);
+  opacity: 0.8;
+  color: inherit;
 }
 
 .file-download-btn {
-  padding: 6px;
-  border-radius: var(--radius-sm);
-  background: var(--accent-primary);
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.2);
   color: #fff;
   border: none;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
+  transition: background var(--transition-fast), transform var(--transition-fast);
+  text-decoration: none !important;
+}
+
+.file-download-btn:hover {
+  background: rgba(255, 255, 255, 0.35);
+  transform: scale(1.08);
 }
 
 /* Image Attachment Preview */

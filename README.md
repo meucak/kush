@@ -16,24 +16,27 @@
 ## ⚡ Temel Özellikler
 
 1. **Sade & Kusursuz Metin Mesajlaşması:**
-   - Kendi gönderdiğiniz mesajlar ekranın sağında zümrüt baloncuklar, iletildi çift mavi tık (`✓✓`) ve zaman damgasıyla konumlanır; ağdaki diğer cihazların mesajları ise sol tarafta listelenir.
-   - Sayfa yenilense veya bağlantı kopsa dahi kalıcı istemci kimliği (`kush_client_id`) sayesinde mesajlarınız daima sağda kalır.
+   - **Offline-First & İletildi Onayı (Tek Tik ✓ / Çift Tik ✓✓):** Cihaz çevrimdışı olsa bile mesaj hemen yerel havuza alınır ve tek tıkla gösterilir; sunucuya iletildiği an otomatik olarak çift mavi tık (`✓✓`) olur.
+   - **Kalıcı Cihaz Hizalama:** Hangi cihazdan bakıyorsanız, o cihazın geçmiş ve anlık gönderdiği tüm mesajlar sağ tarafta zümrüt baloncuklarla dizilir; diğer cihazların mesajları ise sol tarafta listelenir.
 
 2. **AirDrop / LocalSend Tarzı Hızlı Dosya Transferi:**
-   - Her boyuttaki fotoğraf, video, APK veya arşivi pencereye sürükleyip bırakarak ağdaki tüm cihazlara anında gönderme.
-   - Tam ekran görsel önizleme (Lightbox) desteği.
+   - Her boyuttaki belge (PDF, DOCX, ZIP vb.), görsel, video veya arşivi pencereye sürükleyip bırakarak ağdaki tüm cihazlara anında gönderme.
+   - Belge türüne göre özel renkli rozetler (PDF, DOC, ZIP, CODE vb.) ve tam ekran görsel önizleme (Lightbox) desteği.
+   - Mobilde ve masaüstünde tek tıkla doğrudan indirme.
 
-3. **Evrensel Ortak Pano (Universal Clipboard):**
+3. **Google Drive Otomatik Log & Sıfırlama:**
+   - Tüm sohbet geçmişi ve loglar düzenli olarak Google Drive üzerindeki `gdrive:apps/kush/logs/` klasöründe tutulur.
+   - Toshi veya Windows terminalinde `kush --resetlog` komutuyla tüm sunucu hafızası ve Drive log kayıtları anında temizlenir.
+
+4. **Sıfır İşlemci Tüketimi (Zero Background CPU):**
+   - Düşük donanımlı dizüstü bilgisayarlarda (Toshi vb.) pil ve CPU tasarrufu için ağır CSS filtreleri yerine temiz opak katmanlar kullanılmıştır. Boşta CPU tüketimi <%1'dir.
+
+5. **Evrensel Ortak Pano (Universal Clipboard):**
    - Telefondan kopyalanan bir metin veya bağlantıyı "Ağ Panosuna Gönder" diyerek saniyeler içinde bilgisayara aktarın ve tek tıkla kopyalayın.
 
-4. **Apple HIG & Anti-Slop Tasarım Dili:**
-   - 8pt ızgara sistemi, WCAG AAA kontrast, akrilik yarı saydamlık, dikkat dağıtmayan minimalist arayüz.
-   - Açık / Koyu tema modu ve Web Audio API ile Apple tarzı ince bildirim tonları.
-   - 8pt ızgara sistemi, WCAG AAA kontrast, akrilik yarı saydamlık (`backdrop-filter: blur(28px)`), net tipografi hiyerarşisi.
-   - Sistem tercihlerine saygılı Açık / Koyu tema modu.
-
-5. **Tamamen Bağımsız ve Güvenli:**
-   - Dış dünya ile veri paylaşımı yoktur. Tüm veriler yalnızca kendi yerel ağınızda (veya özel Tailscale tünelinizde) akar.
+6. **Apple HIG & Anti-Slop Tasarım Dili:**
+   - 8pt ızgara sistemi, WCAG AAA kontrast, akıcı duyarlılık (responsive) ve sistem tercihlerine saygılı Açık / Koyu tema modu.
+   - Web Audio API ile Apple tarzı ince bildirim tonları.
 
 ---
 

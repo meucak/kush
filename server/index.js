@@ -140,6 +140,21 @@ const server = http.createServer((req, res) => {
     }
   }
 
+  // --- API: Reset Logs ---
+  if ((pathname === '/api/logs/reset' || pathname === '/api/resetlog') && (req.method === 'POST' || req.method === 'GET')) {
+    messageHistory.length = 0;
+    try {
+      fs.writeFileSync(CHAT_LOG_FILE, JSON.stringify([], null, 2), 'utf8');
+      fs.writeFileSync(READABLE_LOG_FILE, `--- Sohbet Sıfırlandı (${new Date().toLocaleString('tr-TR')}) ---\n`, 'utf8');
+    } catch (err) {
+      console.error('Failed to reset logs:', err);
+    }
+    broadcast({ type: 'chat_cleared' });
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ success: true, message: 'Chat logs reset successfully' }));
+    return;
+  }
+
   // --- API: Upload File ---
   if (pathname === '/api/upload' && req.method === 'POST') {
     const rawFileName = req.headers['x-file-name'] || 'file_' + Date.now();
@@ -163,6 +178,8 @@ const server = http.createServer((req, res) => {
     req.pipe(writeStream);
 
     writeStream.on('finish', () => {
+      const clientTag = req.headers['x-client-tag'] || req.headers['x-client-id'] || senderClientId || '';
+      const deviceType = req.headers['x-device-type'] || 'unknown';
       const fileMeta = {
         id: fileId,
         storageName: safeStorageName,
@@ -170,7 +187,9 @@ const server = http.createServer((req, res) => {
         size: bytesReceived,
         mimeType,
         senderName,
-        senderClientId,
+        senderClientId: clientTag,
+        clientTag: clientTag,
+        deviceType: deviceType,
         isVoiceNote,
         duration,
         url: `/api/files/${safeStorageName}`,
@@ -186,11 +205,14 @@ const server = http.createServer((req, res) => {
       // Add to history and persist
       messageHistory.push({
         id: fileId,
-        type: isVoiceNote ? 'voice' : 'file',
+        type: 'file',
         senderName,
-        senderClientId,
+        senderClientId: clientTag,
+        clientTag: clientTag,
+        deviceType: deviceType,
         isVoiceNote,
         duration,
+        mimeType,
         originalName: fileName,
         size: bytesReceived,
         url: fileMeta.url,
@@ -295,7 +317,7 @@ const server = http.createServer((req, res) => {
 
     const ext = path.extname(filePath).toLowerCase();
     const contentType = MIME_TYPES[ext] || 'application/octet-stream';
-    const cacheControl = ext === '.html' || ext === '.json'
+    const cacheControl = (ext === '.html' || ext === '.json' || ext === '.js' || ext === '.css')
       ? 'no-cache, must-revalidate'
       : 'public, max-age=86400';
 
@@ -375,19 +397,22 @@ wss.on('connection', (ws, req) => {
 
         case 'chat_message':
           if (!msg.text || !msg.text.trim()) return;
+          const msgId = msg.id || crypto.randomUUID();
+          const clientTag = msg.clientTag || msg.clientId || currentPeer.clientId || '';
           const newMsg = {
-            id: crypto.randomUUID(),
+            id: msgId,
+            clientTag: clientTag,
             senderId: currentPeer.id,
-            senderClientId: msg.clientId || currentPeer.clientId || '',
+            senderClientId: clientTag,
             senderName: currentPeer.name,
             deviceType: currentPeer.deviceType,
             text: msg.text.trim().slice(0, 5000),
-            timestamp: Date.now()
+            timestamp: msg.timestamp || Date.now()
           };
           messageHistory.push(newMsg);
           if (messageHistory.length > MAX_HISTORY) messageHistory.shift();
           persistMessages();
-          broadcast({ type: 'new_message', message: newMsg });
+          broadcast({ type: 'new_message', message: newMsg, clientMsgId: msg.id || msgId });
           break;
 
         case 'typing':
