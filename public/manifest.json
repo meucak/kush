@@ -1,7 +1,7 @@
 {
-  "name": "kush — Yerel Ağ Mesajlaşma & Dosya Paylaşımı",
+  "name": "kush",
   "short_name": "kush",
-  "description": "Aynı ağdaki cihazlar arasında sıfır gecikmeli mesajlaşma ve doğrudan dosya transferi.",
+  "description": "Tailscale ve yerel ağ üzerinden hızlı mesajlaşma ve dosya transferi.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0d0e12",

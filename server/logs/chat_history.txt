@@ -1,9 +1,16 @@
-[09.11.2026 13:42:43] Kasa (Sunucu) (linux): Selam! kush yerel ağı başarıyla bağlandı 🚀✨
-[09.11.2026 13:43:17] Android Cihazım (android): a
-[09.11.2026 13:43:28] Linux Cihaz (linux): AÖSDNASJNDJÖANSD
-[09.11.2026 13:43:37] Android Cihazım (android): Harika calisiyor abiç
-[09.11.2026 13:43:45] Android Cihazım (android): Hello hello
-[09.11.2026 13:57:45] Android Cihazım (android): alooo
-[09.11.2026 14:17:27] Linux (Toshi) (linux): Toshi Linux test mesaji! Sag hizalama harika calisiyor.
-[09.11.2026 14:55:29] Android Cihazım (android): a
-[09.11.2026 14:55:43] Android Cihazım (cihaz) [DOSYA]: IMG_20261109_224021_780.jpg (2388.6 KB) -> /api/files/c1d84b71-cb3d-4154-b1c6-aabf6f0fbc8d_IMG_20261109_224021_780.jpg
+[09.11.2026 18:42:43] Kasa (Sunucu) (linux): Selam! kush yerel ağı başarıyla bağlandı 🚀✨
+[09.11.2026 18:43:17] Android Cihazım (android): a
+[09.11.2026 18:43:28] Linux Cihaz (linux): AÖSDNASJNDJÖANSD
+[09.11.2026 18:43:37] Android Cihazım (android): Harika calisiyor abiç
+[09.11.2026 18:43:45] Android Cihazım (android): Hello hello
+[09.11.2026 18:57:45] Android Cihazım (android): alooo
+[09.11.2026 19:17:27] Linux (Toshi) (linux): Toshi Linux test mesaji! Sag hizalama harika calisiyor.
+[09.11.2026 19:55:29] Android Cihazım (android): a
+[09.11.2026 19:55:43] Android Cihazım (cihaz) [DOSYA]: IMG_20261109_224021_780.jpg (2388.6 KB) -> /api/files/c1d84b71-cb3d-4154-b1c6-aabf6f0fbc8d_IMG_20261109_224021_780.jpg
+[09.11.2026 20:17:25] Android Cihazım (android): a
+[09.11.2026 20:17:37] Android Cihazım (android): a
+[09.11.2026 20:17:40] Android Cihazım (android): yarak
+[09.11.2026 20:17:43] Android Cihazım (android): kush
+[09.11.2026 20:17:46] Android Cihazım (android): pronooo
+[09.11.2026 20:17:50] Android Cihazım (android): KIRMA ONU
+[09.11.2026 20:22:45] Android Cihazım (android): KASKIMI GERİ VER

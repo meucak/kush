@@ -60,22 +60,13 @@
   const lightboxDownloadBtn = document.getElementById('lightboxDownloadBtn');
   const lightboxCloseBtn = document.getElementById('lightboxCloseBtn');
 
-  // --- Web Audio Chime ---
-  let audioCtx = null;
-  function getAudioContext() {
-    if (!audioCtx) {
-      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    }
-    if (audioCtx.state === 'suspended') {
-      audioCtx.resume();
-    }
-    return audioCtx;
-  }
-
+  // --- Web Audio Chime (Ephemeral / Zero Continuous CPU) ---
   function playChime(type) {
     if (isMuted) return;
     try {
-      const ctx = getAudioContext();
+      const AudioCtxClass = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtxClass) return;
+      const ctx = new AudioCtxClass();
       const now = ctx.currentTime;
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
@@ -99,6 +90,9 @@
         osc.start(now);
         osc.stop(now + 0.08);
       }
+      setTimeout(() => {
+        try { ctx.close(); } catch (_) {}
+      }, 400);
     } catch (e) {}
   }
 
