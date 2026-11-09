@@ -1,0 +1,12 @@
+services:
+  aura-lan:
+    build: .
+    container_name: aura-lan
+    restart: unless-stopped
+    ports:
+      - "8088:8088"
+    volumes:
+      - ./server/uploads:/app/server/uploads
+    environment:
+      - PORT=8088
+      - NODE_ENV=production
