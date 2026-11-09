@@ -2,17 +2,20 @@ package com.kush.app;
 
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.app.DownloadManager;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.Environment;
 import android.util.Log;
 import android.view.KeyEvent;
 import android.view.View;
 import android.webkit.ConsoleMessage;
 import android.webkit.DownloadListener;
 import android.webkit.PermissionRequest;
+import android.webkit.URLUtil;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceError;
@@ -50,6 +53,7 @@ public class MainActivity extends Activity {
         Log.d(TAG, "onCreate initiated");
 
         mWebView = new WebView(this);
+        mWebView.clearCache(true);
         setContentView(mWebView);
 
         setupWebView();
@@ -67,7 +71,7 @@ public class MainActivity extends Activity {
         settings.setMediaPlaybackRequiresUserGesture(false);
         settings.setUseWideViewPort(true);
         settings.setLoadWithOverviewMode(true);
-        settings.setCacheMode(WebSettings.LOAD_DEFAULT);
+        settings.setCacheMode(WebSettings.LOAD_NO_CACHE);
 
         // Modern User Agent
         String defaultUa = settings.getUserAgentString();
@@ -80,12 +84,7 @@ public class MainActivity extends Activity {
         mWebView.setDownloadListener(new DownloadListener() {
             @Override
             public void onDownloadStart(String url, String userAgent, String contentDisposition, String mimeType, long contentLength) {
-                try {
-                    Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
-                    startActivity(intent);
-                } catch (Exception e) {
-                    Toast.makeText(MainActivity.this, "İndirme başlatılamadı: " + e.getMessage(), Toast.LENGTH_SHORT).show();
-                }
+                downloadFileNative(url, contentDisposition, mimeType);
             }
         });
 
@@ -94,12 +93,8 @@ public class MainActivity extends Activity {
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                 String url = request.getUrl().toString();
                 if (url.endsWith(".apk") || url.contains("/download/") || url.contains("/api/files/")) {
-                    try {
-                        Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
-                        startActivity(intent);
-                        return true;
-                    } catch (Exception ignored) {
-                    }
+                    downloadFileNative(url, null, null);
+                    return true;
                 }
                 if (url.startsWith("http://") || url.startsWith("https://")) {
                     return false; // let webview load LAN links
@@ -238,6 +233,59 @@ public class MainActivity extends Activity {
                 }
             })
             .show();
+    }
+
+    private void downloadFileNative(String url, String contentDisposition, String mimeType) {
+        try {
+            Uri uri = Uri.parse(url);
+            String fileName = null;
+
+            try {
+                fileName = URLUtil.guessFileName(url, contentDisposition, mimeType);
+            } catch (Exception ignored) {}
+
+            if (fileName == null || fileName.isEmpty() || fileName.equals("downloadfile")) {
+                String path = uri.getPath();
+                if (path != null && path.contains("/")) {
+                    String lastSegment = path.substring(path.lastIndexOf('/') + 1);
+                    if (lastSegment.contains("_")) {
+                        fileName = lastSegment.substring(lastSegment.indexOf('_') + 1);
+                    } else {
+                        fileName = lastSegment;
+                    }
+                }
+            }
+            if (fileName == null || fileName.isEmpty()) {
+                fileName = "kush_indirilen_dosya";
+            }
+
+            DownloadManager.Request request = new DownloadManager.Request(uri);
+            if (mimeType != null && !mimeType.isEmpty()) {
+                request.setMimeType(mimeType);
+            }
+            request.setTitle(fileName);
+            request.setDescription("kush ile doğrudan indiriliyor");
+            request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
+            request.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, fileName);
+            request.setAllowedOverMetered(true);
+            request.setAllowedOverRoaming(true);
+
+            DownloadManager dm = (DownloadManager) getSystemService(DOWNLOAD_SERVICE);
+            if (dm != null) {
+                dm.enqueue(request);
+                Toast.makeText(this, fileName + " İndirilenler klasörüne kaydediliyor...", Toast.LENGTH_SHORT).show();
+                return;
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "Native download error, falling back", e);
+        }
+
+        try {
+            Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
+            startActivity(intent);
+        } catch (Exception ex) {
+            Toast.makeText(this, "İndirme başlatılamadı: " + ex.getMessage(), Toast.LENGTH_SHORT).show();
+        }
     }
 
     @Override

@@ -182,6 +182,7 @@ const server = http.createServer((req, res) => {
       const deviceType = req.headers['x-device-type'] || 'unknown';
       const fileMeta = {
         id: fileId,
+        type: 'file',
         storageName: safeStorageName,
         originalName: fileName,
         size: bytesReceived,
@@ -190,10 +191,11 @@ const server = http.createServer((req, res) => {
         senderClientId: clientTag,
         clientTag: clientTag,
         deviceType: deviceType,
-        isVoiceNote,
-        duration,
+        isVoiceNote: false,
+        duration: 0,
         url: `/api/files/${safeStorageName}`,
-        uploadedAt: Date.now()
+        uploadedAt: Date.now(),
+        timestamp: Date.now()
       };
 
       // Broadcast file notification via WebSocket
@@ -202,22 +204,9 @@ const server = http.createServer((req, res) => {
         file: fileMeta
       });
 
-      // Add to history and persist
-      messageHistory.push({
-        id: fileId,
-        type: 'file',
-        senderName,
-        senderClientId: clientTag,
-        clientTag: clientTag,
-        deviceType: deviceType,
-        isVoiceNote,
-        duration,
-        mimeType,
-        originalName: fileName,
-        size: bytesReceived,
-        url: fileMeta.url,
-        timestamp: Date.now()
-      });
+      // Add to history and persist (exact identical object shape)
+      messageHistory.push(fileMeta);
+      if (messageHistory.length > MAX_HISTORY) messageHistory.shift();
       persistMessages();
 
       res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -246,6 +235,16 @@ const server = http.createServer((req, res) => {
     const stat = fs.statSync(filePath);
     const ext = path.extname(filePath).toLowerCase();
     const contentType = MIME_TYPES[ext] || 'application/octet-stream';
+    const cleanFileName = requestedFile.split('_').slice(1).join('_') || requestedFile;
+
+    // Enforce direct download (attachment) for PDF, documents, archives, or ?download=1
+    const isImage = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.bmp'].includes(ext);
+    const isExplicitDownload = parsedUrl.searchParams.get('download') === '1';
+    const shouldAttach = isExplicitDownload || !isImage;
+
+    const disposition = shouldAttach
+      ? `attachment; filename="${encodeURIComponent(cleanFileName)}"; filename*=UTF-8''${encodeURIComponent(cleanFileName)}`
+      : `inline; filename="${encodeURIComponent(cleanFileName)}"`;
 
     // Range support for audio/video streaming
     const range = req.headers.range;
@@ -259,14 +258,18 @@ const server = http.createServer((req, res) => {
         'Content-Range': `bytes ${start}-${end}/${stat.size}`,
         'Accept-Ranges': 'bytes',
         'Content-Length': chunksize,
-        'Content-Type': contentType
+        'Content-Type': contentType,
+        'Content-Disposition': disposition,
+        'X-Content-Type-Options': 'nosniff'
       });
       file.pipe(res);
     } else {
       res.writeHead(200, {
         'Content-Length': stat.size,
         'Content-Type': contentType,
-        'Content-Disposition': `inline; filename="${requestedFile.split('_').slice(1).join('_') || requestedFile}"`
+        'Content-Disposition': disposition,
+        'X-Content-Type-Options': 'nosniff',
+        'Accept-Ranges': 'bytes'
       });
       fs.createReadStream(filePath).pipe(res);
     }
@@ -317,15 +320,22 @@ const server = http.createServer((req, res) => {
 
     const ext = path.extname(filePath).toLowerCase();
     const contentType = MIME_TYPES[ext] || 'application/octet-stream';
-    const cacheControl = (ext === '.html' || ext === '.json' || ext === '.js' || ext === '.css')
-      ? 'no-cache, must-revalidate'
-      : 'public, max-age=86400';
+    const isDynamicWebAsset = (ext === '.html' || ext === '.json' || ext === '.js' || ext === '.css');
 
-    res.writeHead(200, {
+    const headers = {
       'Content-Type': contentType,
-      'Content-Length': stats.size,
-      'Cache-Control': cacheControl
-    });
+      'Content-Length': stats.size
+    };
+
+    if (isDynamicWebAsset) {
+      headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0';
+      headers['Pragma'] = 'no-cache';
+      headers['Expires'] = '0';
+    } else {
+      headers['Cache-Control'] = 'public, max-age=86400';
+    }
+
+    res.writeHead(200, headers);
     fs.createReadStream(filePath).pipe(res);
   });
 });

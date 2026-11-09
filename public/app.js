@@ -255,10 +255,15 @@
         if (data.history && data.history.length > 0) {
           clearWelcome();
           data.history.forEach(item => {
-            if (item.type === 'file') {
-              appendFileCard(item);
-            } else {
-              appendMessage(item);
+            try {
+              const isFile = item.type === 'file' || !!item.url || !!item.originalName || !!item.storageName;
+              if (isFile) {
+                appendFileCard(item);
+              } else if (item.text && item.text.trim()) {
+                appendMessage(item);
+              }
+            } catch (err) {
+              console.error('Error rendering history item:', err, item);
             }
           });
           scrollToBottom();
@@ -408,6 +413,20 @@
 
   // Append Standard Text Message
   function appendMessage(msg) {
+    if (!msg) return;
+
+    // Failsafe: If a file object was accidentally passed here, route to appendFileCard
+    const isFile = msg.type === 'file' || !!msg.url || !!msg.originalName || !!msg.storageName;
+    if (isFile) {
+      appendFileCard(msg);
+      return;
+    }
+
+    // Never render an empty bubble
+    if (!msg.text || !msg.text.trim()) {
+      return;
+    }
+
     appendDateDividerIfNeeded(msg.timestamp);
 
     const isSelf = checkIsSelf(msg);
@@ -480,62 +499,68 @@
   // Append File Card
   function appendFileCard(file) {
     if (!file) return;
-    appendDateDividerIfNeeded(file.uploadedAt || file.timestamp);
+    try {
+      appendDateDividerIfNeeded(file.uploadedAt || file.timestamp);
 
-    const isSelf = checkIsSelf(file);
-    const row = document.createElement('div');
-    row.className = `msg-row ${isSelf ? 'self' : 'peer'}`;
-    if (file.id) row.setAttribute('data-msg-id', file.id);
+      const isSelf = checkIsSelf(file);
+      const row = document.createElement('div');
+      row.className = `msg-row ${isSelf ? 'self' : 'peer'}`;
+      if (file.id) row.setAttribute('data-msg-id', file.id);
 
-    const rawFileName = file.originalName || file.name || file.storageName || 'paylasilan_dosya';
-    const fileName = escapeHtml(rawFileName);
-    const sizeFormatted = formatFileSize(file.size || 0);
-    const timeFormatted = new Date(file.uploadedAt || file.timestamp || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    const checkmarkHtml = isSelf ? `<span class="msg-check delivered" title="İletildi">✓✓</span>` : '';
-    
-    const fileUrl = file.url || '';
-    const absoluteUrl = fileUrl.startsWith('http') ? fileUrl : (window.location.origin + fileUrl);
-    
-    const fileInfo = getFileExtInfo(rawFileName, file.mimeType);
+      const rawFileName = file.originalName || file.name || file.storageName || 
+        (file.url ? file.url.split('/').pop().replace(/^[a-f0-9-]+_/, '') : 'paylasilan_dosya');
+      const fileName = escapeHtml(rawFileName);
+      const sizeFormatted = formatFileSize(file.size || 0);
+      const timeFormatted = new Date(file.uploadedAt || file.timestamp || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      const checkmarkHtml = isSelf ? `<span class="msg-check delivered" title="İletildi">✓✓</span>` : '';
+      
+      const fileUrl = file.url || '';
+      const absoluteUrl = fileUrl.startsWith('http') ? fileUrl : (window.location.origin + fileUrl);
+      const downloadUrl = absoluteUrl + (absoluteUrl.includes('?') ? '&' : '?') + 'download=1';
+      
+      const fileInfo = getFileExtInfo(rawFileName, file.mimeType);
 
-    let previewHtml = '';
-    if (fileInfo.isImage && fileUrl) {
-      previewHtml = `<img src="${fileUrl}" class="img-preview" alt="${fileName}" loading="lazy" data-filename="${fileName}">`;
-    }
-
-    row.innerHTML = `
-      ${!isSelf ? `<span class="msg-sender">${escapeHtml(file.senderName || 'Ağdaki Cihaz')}</span>` : ''}
-      <div class="msg-bubble">
-        <div class="file-card file-${fileInfo.typeClass}">
-          <div class="file-icon file-badge-${fileInfo.typeClass}">
-            <span class="file-ext-badge">${escapeHtml(fileInfo.badge)}</span>
-          </div>
-          <div class="file-info">
-            <span class="file-name" title="${fileName}">${fileName}</span>
-            <span class="file-size">${sizeFormatted}</span>
-          </div>
-          <a href="${absoluteUrl}" download="${fileName}" class="file-download-btn" title="İndir: ${fileName}">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-          </a>
-        </div>
-        ${previewHtml}
-        <div class="msg-meta-row">
-          <span class="msg-time">${timeFormatted}</span>
-          ${checkmarkHtml}
-        </div>
-      </div>
-    `;
-
-    if (fileInfo.isImage) {
-      const img = row.querySelector('.img-preview');
-      if (img) {
-        img.addEventListener('click', () => {
-          openLightbox(fileUrl, rawFileName);
-        });
+      let previewHtml = '';
+      if (fileInfo.isImage && fileUrl) {
+        previewHtml = `<img src="${absoluteUrl}" class="img-preview" alt="${fileName}" loading="lazy" data-filename="${fileName}">`;
       }
-    }
 
-    messagesContainer.appendChild(row);
+      row.innerHTML = `
+        ${!isSelf ? `<span class="msg-sender">${escapeHtml(file.senderName || 'Ağdaki Cihaz')}</span>` : ''}
+        <div class="msg-bubble">
+          <div class="file-card file-${fileInfo.typeClass}">
+            <div class="file-icon file-badge-${fileInfo.typeClass}">
+              <span class="file-ext-badge">${escapeHtml(fileInfo.badge)}</span>
+            </div>
+            <div class="file-info">
+              <span class="file-name" title="${fileName}">${fileName}</span>
+              <span class="file-size">${sizeFormatted}</span>
+            </div>
+            <a href="${downloadUrl}" download="${fileName}" class="file-download-btn" title="İndir: ${fileName}">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+            </a>
+          </div>
+          ${previewHtml}
+          <div class="msg-meta-row">
+            <span class="msg-time">${timeFormatted}</span>
+            ${checkmarkHtml}
+          </div>
+        </div>
+      `;
+
+      if (fileInfo.isImage) {
+        const img = row.querySelector('.img-preview');
+        if (img) {
+          img.addEventListener('click', () => {
+            openLightbox(absoluteUrl, rawFileName);
+          });
+        }
+      }
+
+      messagesContainer.appendChild(row);
+    } catch (err) {
+      console.error('appendFileCard error:', err, file);
+    }
   }
 
   // --- Image Lightbox Modal ---
@@ -543,7 +568,7 @@
     if (!imageLightbox) return;
     lightboxImg.src = url;
     lightboxTitle.textContent = title || 'Görsel Önizleme';
-    lightboxDownloadBtn.href = url;
+    lightboxDownloadBtn.href = url + (url.includes('?') ? '&' : '?') + 'download=1';
     lightboxDownloadBtn.setAttribute('download', title || 'gorsel.jpg');
     imageLightbox.classList.remove('hidden');
   }
