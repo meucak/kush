@@ -21,7 +21,7 @@ const CHAT_LOG_FILE = path.join(LOGS_DIR, 'chat_history.json');
 const READABLE_LOG_FILE = path.join(LOGS_DIR, 'chat_history.txt');
 
 // In-memory state
-const peers = new Map(); // ws -> { id, name, deviceType, ip, joinedAt, lastSeen }
+const peers = new Map(); // ws -> { id, clientId, name, deviceType, ip, joinedAt, lastSeen }
 const messageHistory = []; // last 150 messages
 const MAX_HISTORY = 150;
 let sharedClipboard = { text: '', sender: 'System', updatedAt: Date.now() };
@@ -44,8 +44,13 @@ function persistMessages() {
     fs.writeFileSync(CHAT_LOG_FILE, JSON.stringify(messageHistory, null, 2), 'utf8');
     const readable = messageHistory.map(m => {
       const time = new Date(m.timestamp).toLocaleString('tr-TR');
-      if (m.type === 'file') {
-        return `[${time}] ${m.senderName} (${m.deviceType || 'cihaz'}) [DOSYA]: ${m.originalName} (${(m.size / 1024).toFixed(1)} KB) -> /api/download/${m.id}`;
+      if (m.isVoiceNote || m.type === 'voice') {
+        const mins = Math.floor((m.duration || 0) / 60);
+        const secs = Math.floor((m.duration || 0) % 60);
+        const durStr = `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+        return `[${time}] ${m.senderName} (${m.deviceType || 'cihaz'}) [SESLİ MESAJ (${durStr})]: ${m.url}`;
+      } else if (m.type === 'file') {
+        return `[${time}] ${m.senderName} (${m.deviceType || 'cihaz'}) [DOSYA]: ${m.originalName} (${(m.size / 1024).toFixed(1)} KB) -> ${m.url}`;
       }
       return `[${time}] ${m.senderName} (${m.deviceType || 'cihaz'}): ${m.text}`;
     }).join('\n');
@@ -70,6 +75,10 @@ const MIME_TYPES = {
   '.webp': 'image/webp',
   '.mp3': 'audio/mpeg',
   '.wav': 'audio/wav',
+  '.webm': 'audio/webm',
+  '.ogg': 'audio/ogg',
+  '.m4a': 'audio/mp4',
+  '.aac': 'audio/aac',
   '.mp4': 'video/mp4',
   '.pdf': 'application/pdf',
   '.apk': 'application/vnd.android.package-archive',
@@ -93,7 +102,7 @@ const server = http.createServer((req, res) => {
   // CORS & Security Headers
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Range, X-File-Name, X-File-Type, X-Sender-Name');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Range, X-File-Name, X-File-Type, X-Sender-Name, X-Client-Id, X-Is-Voice-Note, X-Voice-Duration');
 
   if (req.method === 'OPTIONS') {
     res.writeHead(204);
@@ -137,6 +146,9 @@ const server = http.createServer((req, res) => {
     const fileName = decodeURIComponent(rawFileName);
     const mimeType = req.headers['x-file-type'] || 'application/octet-stream';
     const senderName = decodeURIComponent(req.headers['x-sender-name'] || 'Anonymous');
+    const senderClientId = req.headers['x-client-id'] || '';
+    const isVoiceNote = req.headers['x-is-voice-note'] === 'true';
+    const duration = parseFloat(req.headers['x-voice-duration'] || '0') || 0;
     const fileId = crypto.randomUUID();
     const safeStorageName = `${fileId}_${path.basename(fileName).replace(/[^a-zA-Z0-9._-]/g, '_')}`;
     const targetPath = path.join(UPLOADS_DIR, safeStorageName);
@@ -158,6 +170,9 @@ const server = http.createServer((req, res) => {
         size: bytesReceived,
         mimeType,
         senderName,
+        senderClientId,
+        isVoiceNote,
+        duration,
         url: `/api/files/${safeStorageName}`,
         uploadedAt: Date.now()
       };
@@ -171,8 +186,11 @@ const server = http.createServer((req, res) => {
       // Add to history and persist
       messageHistory.push({
         id: fileId,
-        type: 'file',
+        type: isVoiceNote ? 'voice' : 'file',
         senderName,
+        senderClientId,
+        isVoiceNote,
+        duration,
         originalName: fileName,
         size: bytesReceived,
         url: fileMeta.url,
@@ -351,6 +369,7 @@ wss.on('connection', (ws, req) => {
         case 'identify':
           if (msg.name) currentPeer.name = msg.name.trim().slice(0, 32);
           if (msg.deviceType) currentPeer.deviceType = msg.deviceType;
+          if (msg.clientId) currentPeer.clientId = msg.clientId;
           broadcastPeerList();
           break;
 
@@ -359,6 +378,7 @@ wss.on('connection', (ws, req) => {
           const newMsg = {
             id: crypto.randomUUID(),
             senderId: currentPeer.id,
+            senderClientId: msg.clientId || currentPeer.clientId || '',
             senderName: currentPeer.name,
             deviceType: currentPeer.deviceType,
             text: msg.text.trim().slice(0, 5000),

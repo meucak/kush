@@ -46,5 +46,26 @@
     "deviceType": "android",
     "text": "alooo",
     "timestamp": 1794250665749
+  },
+  {
+    "id": "voice_sample_1",
+    "type": "voice",
+    "senderName": "Linux (Toshi)",
+    "senderClientId": "toshi_client",
+    "isVoiceNote": true,
+    "duration": 3,
+    "originalName": "Ses_Kaydi_Örnek.wav",
+    "size": 264644,
+    "url": "/api/files/sample_voice.wav",
+    "timestamp": 1794251563875
+  },
+  {
+    "id": "cb8c73d8-06ba-4729-970e-babddbd346d0",
+    "senderId": "b98c9ac4-af3d-4fbd-b332-2b6117ed9753",
+    "senderClientId": "c_sebc7er1x_1794251846564",
+    "senderName": "Linux (Toshi)",
+    "deviceType": "linux",
+    "text": "Toshi Linux test mesaji! Sag hizalama harika calisiyor.",
+    "timestamp": 1794251847980
   }
 ]

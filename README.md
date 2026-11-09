@@ -15,16 +15,32 @@
 
 ## ⚡ Temel Özellikler
 
-1. **Sıfır Gecikmeli Yerel Mesajlaşma (WebSockets):**
-   - İnternet kotası harcamadan, bulut sunuculara bağımlı kalmadan tamamen yerel ağ üzerinden anlık mesajlaşma.
-   - Yazıyor... (typing) göstergeleri, otomatik scroll ve Web Audio API ile sentezlenen Apple tarzı bildirim tonları.
+1. **WhatsApp & Instagram DM Tarzı Akıllı Sohbet:**
+   - Kendi gönderdiğiniz mesajlar ekranın sağında zümrüt baloncuklar, iletildi çift mavi tık (`✓✓`) ve zaman damgasıyla konumlanır; ağdaki diğer cihazların mesajları ise sol tarafta ad ve cihaz rozetleriyle listelenir.
+   - Sayfa yenilense veya bağlantı kopsa dahi kalıcı istemci kimliği (`kush_client_id`) sayesinde mesajlarınız daima sağda kalır.
 
-2. **AirDrop / LocalSend Tarzı Hızlı Dosya Transferi:**
+2. **Gerçek Sesli Mesaj (Voice Note Recording & Playback):**
+   - Tek tıkla ses kaydı başlatma, konuşma süresince ses frekansını analiz eden canlı dalga (equalizer) animasyonu, iptal (`✕`) ve gönder (`➤`) butonları.
+   - Oynatırken ses dalgası üzerinden tıklanabilir/ilerletilebilir scrubber, süre takibi ve 1x / 1.5x / 2x oynatma hızı seçeneği.
+
+3. **Sesli Dikte (Speech-to-Text):**
+   - Web Speech API ile konuşulanları anında Türkçe metne dönüştürerek mesaj kutusuna yazar.
+
+4. **Hızlı Reaksiyon & Emoji Dock:**
+   - Mesaj yazma çubuğunun hemen üzerinde yer alan tek dokunuşluk hızlı emoji çubuğu (`👍`, `❤️`, `😂`, `🔥`, `🎉`, `🙏`, `🚀`, `👀`).
+
+5. **Tam Ekran Görsel Önizleme (Lightbox):**
+   - Paylaşılan fotoğraflara tıklandığında akrilik bulanık arka planla tam ekran açılır, yüksek çözünürlükte incelenebilir ve tek tıkla indirilebilir.
+
+6. **AirDrop / LocalSend Tarzı Hızlı Dosya Transferi:**
    - Her boyuttaki fotoğraf, video, APK veya arşivi pencereye sürükleyip bırakarak ağdaki tüm cihazlara anında gönderme.
-   - İlerleme çubuğu, resim önizlemeleri ve doğrudan tarayıcıdan indirme linkleri.
+   - HTTP Range desteği ile büyük medya dosyalarında anında ileri/geri sarma.
 
-3. **Evrensel Ortak Pano (Universal Clipboard):**
+7. **Evrensel Ortak Pano (Universal Clipboard):**
    - Telefondan kopyalanan bir metin veya bağlantıyı "Ağ Panosuna Gönder" diyerek saniyeler içinde bilgisayara aktarın ve tek tıkla kopyalayın.
+
+8. **Akıllı Cihaz & İşletim Sistemi Algılama:**
+   - PC ve dizüstü cihazları otomatik tanır (`Linux (Toshi)`, `Windows (Quasimodo)`, `Android (Telefon)`). Üst çubuktan tek tıkla anında yeniden adlandırılabilir.
 
 4. **Apple HIG & Anti-Slop Tasarım Dili:**
    - 8pt ızgara sistemi, WCAG AAA kontrast, akrilik yarı saydamlık (`backdrop-filter: blur(28px)`), net tipografi hiyerarşisi.
