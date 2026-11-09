@@ -1,6 +1,6 @@
 {
-  "name": "Aura — Yerel Ağ Mesajlaşma & Dosya Paylaşımı",
-  "short_name": "Aura",
+  "name": "Saksoğan — Yerel Ağ Mesajlaşma & Dosya Paylaşımı",
+  "short_name": "Saksoğan",
   "description": "Aynı ağdaki cihazlar arasında sıfır gecikmeli mesajlaşma ve doğrudan dosya transferi.",
   "start_url": "/",
   "display": "standalone",

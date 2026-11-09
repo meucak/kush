@@ -1,12 +1,12 @@
-# Aura LAN 🌐✨
+# Saksoğan 🌐🧅✨
 
-> **Aura LAN**, yerel ağ (Wi-Fi, Ethernet veya Tailscale) üzerindeki tüm cihazlarınız arasında sıfır gecikmeli mesajlaşma, yüksek hızlı doğrudan dosya paylaşımı ve ortak pano eşitlemesi sağlayan, tamamen izole ve kendi sunucunuzda çalışan modern bir yerel iletişim ekosistemidir.
+> **Saksoğan**, yerel ağ (Wi-Fi, Ethernet veya Tailscale) üzerindeki tüm cihazlarınız arasında sıfır gecikmeli mesajlaşma, yüksek hızlı doğrudan dosya paylaşımı ve ortak pano eşitlemesi sağlayan, tamamen izole ve kendi sunucunuzda çalışan modern bir yerel iletişim ekosistemidir.
 
 ---
 
 ## 📱 Desteklenen Platformlar
 
-- **Mobil (Android):** Yerel APK paketi (`aura-lan.apk`) ve kurulabilir PWA desteği.
+- **Mobil (Android):** Yerel APK paketi (`saksogan.apk`) ve kurulabilir PWA desteği.
 - **Linux (Toshi / Debian / Arch vb.):** Bağımsız Chromium/Edge app-mode masaüstü kısayolu.
 - **Windows (Quasimodo / Windows 10/11):** Doğrudan yerel masaüstü uygulama entegrasyonu.
 - **Web (Tüm Tarayıcılar):** Chrome, Safari, Firefox üzerinden anında erişim.
@@ -41,8 +41,8 @@ Sunucu Debian (Kasa) üzerinde Docker ve `docker-compose` ile tamamen izole şek
 
 ```bash
 # Repoyu klonlayın
-git clone https://github.com/meucak/aura-lan.git
-cd aura-lan
+git clone https://github.com/meucak/saksogan.git
+cd saksogan
 
 # Docker container'ı derleyin ve başlatın
 docker compose up -d --build
@@ -56,24 +56,24 @@ Sunucu varsayılan olarak **8088** portunda dinler:
 
 ## 📲 Android APK Yükleme
 
-Aura LAN sunucusunun ana ekranındaki **"APK"** butonuna basarak veya doğrudan aşağıdaki adresten imzalı APK'yı indirebilirsiniz:
+Saksoğan sunucusunun ana ekranındaki **"APK"** butonuna basarak veya doğrudan aşağıdaki adresten imzalı APK'yı indirebilirsiniz:
 
 ```
-http://<sunucu-ip>:8088/download/aura.apk
+http://<sunucu-ip>:8088/download/saksogan.apk
 ```
 
-Ayrıca Google Drive ve Sarp ile paylaşımlı klasöre (`BaylajımlıGılazör`) otomatik olarak yüklenmiştir.
+Ayrıca Google Drive (`gdrive:agy/saksogan/saksogan.apk`) ve Sarp ile paylaşımlı klasöre (`BaylajımlıGılazör/saksogan.apk`) otomatik olarak yüklenmiştir.
 
 ---
 
 ## 📁 Proje Mimarisi
 
 ```
-aura-lan/
+saksogan/
 ├── Dockerfile              # Hafif Node.js Alpine konteyneri
 ├── docker-compose.yml      # Port ve hacim yapılandırması
 ├── package.json            # Node.js bağımlılıkları (ws)
-├── aura-lan.apk            # İmzalı ve optimize Android APK
+├── saksogan.apk            # İmzalı ve optimize Android APK
 ├── server/
 │   ├── index.js            # HTTP API + WebSocket sunucusu
 │   └── uploads/            # Paylaşılan dosya depolama alanı

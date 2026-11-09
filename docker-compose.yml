@@ -7,6 +7,8 @@ services:
       - "8088:8088"
     volumes:
       - ./server/uploads:/app/server/uploads
+      - ./saksogan.apk:/app/saksogan.apk:ro
+      - ./aura-lan.apk:/app/aura-lan.apk:ro
     environment:
       - PORT=8088
       - NODE_ENV=production

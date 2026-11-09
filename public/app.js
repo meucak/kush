@@ -9,7 +9,7 @@
   let ws = null;
   let myId = null;
   let myIp = null;
-  let myName = localStorage.getItem('aura_device_name') || detectDefaultName();
+  let myName = localStorage.getItem('saksogan_device_name') || detectDefaultName();
   let myDeviceType = detectDeviceType();
   let activePeers = [];
   let isTypingTimeout = null;
@@ -106,7 +106,7 @@
       linux: 'Linux Cihaz',
       mac: 'Mac'
     };
-    return map[type] || 'Aura Cihazı';
+    return map[type] || 'Saksoğan Cihazı';
   }
 
   function getDeviceIcon(type) {
@@ -127,7 +127,7 @@
   selfNameInput.addEventListener('change', () => {
     myName = selfNameInput.value.trim() || detectDefaultName();
     selfNameInput.value = myName;
-    localStorage.setItem('aura_device_name', myName);
+    localStorage.setItem('saksogan_device_name', myName);
     if (ws && ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify({ type: 'identify', name: myName, deviceType: myDeviceType }));
     }
@@ -461,14 +461,14 @@
   });
 
   // --- Theme Toggle ---
-  const currentTheme = localStorage.getItem('aura_theme') || 'theme-dark';
+  const currentTheme = localStorage.getItem('saksogan_theme') || 'theme-dark';
   document.body.className = currentTheme;
 
   themeToggle.addEventListener('click', () => {
     const isDark = document.body.classList.contains('theme-dark');
     const newTheme = isDark ? 'theme-light' : 'theme-dark';
     document.body.className = newTheme;
-    localStorage.setItem('aura_theme', newTheme);
+    localStorage.setItem('saksogan_theme', newTheme);
   });
 
   // --- Mobile Sidebar Toggle ---
@@ -484,7 +484,7 @@
 
   // --- Direct APK Download ---
   downloadApkBtn.addEventListener('click', () => {
-    window.location.href = '/download/aura.apk';
+    window.location.href = '/download/saksogan.apk';
   });
 
   // --- System Notifications ---
@@ -494,7 +494,7 @@
 
   function notifyIfBackground(title, body) {
     if (document.hidden && 'Notification' in window && Notification.permission === 'granted') {
-      new Notification(`Aura: ${title}`, {
+      new Notification(`Saksoğan: ${title}`, {
         body: body,
         icon: '/icons/icon-192.png'
       });

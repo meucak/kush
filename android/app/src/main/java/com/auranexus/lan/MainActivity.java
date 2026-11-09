@@ -24,9 +24,9 @@ public class MainActivity extends Activity {
     private WebView mWebView;
     private ValueCallback<Uri[]> mFilePathCallback;
     private static final int FILE_CHOOSER_REQUEST_CODE = 1001;
-    private static final String PREFS_NAME = "AuraPrefs";
+    private static final String PREFS_NAME = "SaksoganPrefs";
     private static final String KEY_SERVER_URL = "server_url";
-    private static final String DEFAULT_SERVER_URL = "http://192.168.1.102:8088";
+    private static final String DEFAULT_SERVER_URL = "http://100.69.155.110:8088";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -53,7 +53,7 @@ public class MainActivity extends Activity {
 
         // Modern User Agent
         String defaultUa = settings.getUserAgentString();
-        settings.setUserAgentString(defaultUa + " AuraNative/1.0");
+        settings.setUserAgentString(defaultUa + " SaksoganNative/1.0");
 
         mWebView.setWebViewClient(new WebViewClient() {
             @Override
@@ -116,7 +116,7 @@ public class MainActivity extends Activity {
         input.setSelection(input.getText().length());
 
         new AlertDialog.Builder(this)
-            .setTitle("Aura LAN Sunucu Ayarı")
+            .setTitle("Saksoğan Sunucu Ayarı")
             .setMessage(promptMessage)
             .setView(input)
             .setPositiveButton("Bağlan", new DialogInterface.OnClickListener() {

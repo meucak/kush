@@ -64,10 +64,12 @@ keytool -genkey -v -keystore debug.keystore -alias debug -keyalg RSA -keysize 20
 echo "Signing APK with apksigner..."
 "$BUILD_TOOLS/apksigner" sign --ks debug.keystore \
     --ks-pass pass:android --key-pass pass:android \
-    --out /workspace/aura-lan.apk aligned.apk
+    --out /workspace/saksogan.apk aligned.apk
+
+cp /workspace/saksogan.apk /workspace/aura-lan.apk
 
 echo "Verifying signed APK..."
-"$BUILD_TOOLS/apksigner" verify --verbose /workspace/aura-lan.apk
+"$BUILD_TOOLS/apksigner" verify --verbose /workspace/saksogan.apk
 
-echo "=== SUCCESS! APK built at /workspace/aura-lan.apk ==="
-ls -lh /workspace/aura-lan.apk
+echo "=== SUCCESS! APK built at /workspace/saksogan.apk ==="
+ls -lh /workspace/saksogan.apk
