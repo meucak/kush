@@ -48,18 +48,6 @@
     "timestamp": 1794250665749
   },
   {
-    "id": "voice_sample_1",
-    "type": "voice",
-    "senderName": "Linux (Toshi)",
-    "senderClientId": "toshi_client",
-    "isVoiceNote": true,
-    "duration": 3,
-    "originalName": "Ses_Kaydi_Örnek.wav",
-    "size": 264644,
-    "url": "/api/files/sample_voice.wav",
-    "timestamp": 1794251563875
-  },
-  {
     "id": "cb8c73d8-06ba-4729-970e-babddbd346d0",
     "senderId": "b98c9ac4-af3d-4fbd-b332-2b6117ed9753",
     "senderClientId": "c_sebc7er1x_1794251846564",
@@ -67,5 +55,26 @@
     "deviceType": "linux",
     "text": "Toshi Linux test mesaji! Sag hizalama harika calisiyor.",
     "timestamp": 1794251847980
+  },
+  {
+    "id": "f982d792-4806-492a-a302-0ac3b2544ddf",
+    "senderId": "dd16bed3-f0ad-4c85-95a4-c3d86b845bfe",
+    "senderClientId": "",
+    "senderName": "Android Cihazım",
+    "deviceType": "android",
+    "text": "a",
+    "timestamp": 1794254129678
+  },
+  {
+    "id": "c1d84b71-cb3d-4154-b1c6-aabf6f0fbc8d",
+    "type": "file",
+    "senderName": "Android Cihazım",
+    "senderClientId": "",
+    "isVoiceNote": false,
+    "duration": 0,
+    "originalName": "IMG_20261109_224021_780.jpg",
+    "size": 2445928,
+    "url": "/api/files/c1d84b71-cb3d-4154-b1c6-aabf6f0fbc8d_IMG_20261109_224021_780.jpg",
+    "timestamp": 1794254143335
   }
 ]

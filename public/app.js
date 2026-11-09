@@ -1,5 +1,5 @@
 // ==============================================================================
-// kush — Reactive LAN & Tailscale Client Application (Apple HIG & Anti-Slop)
+// kush — Reactive LAN & Tailscale Client (Clean, Fast & Apple HIG)
 // ==============================================================================
 
 (function() {
@@ -10,7 +10,7 @@
   let myId = null;
   let myIp = null;
   
-  // Persistent Client UUID across reloads / sessions
+  // Persistent Client UUID across reloads / sessions (ensures own messages are ALWAYS on the right)
   let myClientId = localStorage.getItem('kush_client_id');
   if (!myClientId) {
     myClientId = 'c_' + Math.random().toString(36).substring(2, 11) + '_' + Date.now();
@@ -23,21 +23,6 @@
   let activePeers = [];
   let isTypingTimeout = null;
   let lastMessageDateStr = null;
-
-  // Active audio player instance tracking
-  let currentPlayingAudio = null;
-  let currentPlayingBtn = null;
-  let currentPlayingWave = null;
-
-  // Voice note recording state
-  let mediaRecorder = null;
-  let audioStream = null;
-  let audioChunks = [];
-  let recordingStartTime = 0;
-  let recordingTimerInterval = null;
-  let audioCtx = null;
-  let analyserNode = null;
-  let liveWaveformAnimId = null;
 
   // --- DOM Elements ---
   const messagesContainer = document.getElementById('messagesContainer');
@@ -69,25 +54,14 @@
   const uploadProgressBar = document.getElementById('uploadProgressBar');
   const typingIndicator = document.getElementById('typingIndicator');
   const typingText = document.getElementById('typingText');
-  const headerDeviceBtn = document.getElementById('headerDeviceBtn');
-  const headerDeviceName = document.getElementById('headerDeviceName');
-  const headerDeviceIcon = document.getElementById('headerDeviceIcon');
-  const micBtn = document.getElementById('micBtn');
-  const voiceNoteBtn = document.getElementById('voiceNoteBtn');
-  const standardInputCard = document.getElementById('standardInputCard');
-  const voiceRecordingCard = document.getElementById('voiceRecordingCard');
-  const cancelVoiceBtn = document.getElementById('cancelVoiceBtn');
-  const sendVoiceBtn = document.getElementById('sendVoiceBtn');
-  const voiceDurationText = document.getElementById('voiceDurationText');
-  const voiceWaveformLive = document.getElementById('voiceWaveformLive');
-  const emojiDock = document.getElementById('emojiDock');
   const imageLightbox = document.getElementById('imageLightbox');
   const lightboxImg = document.getElementById('lightboxImg');
   const lightboxTitle = document.getElementById('lightboxTitle');
   const lightboxDownloadBtn = document.getElementById('lightboxDownloadBtn');
   const lightboxCloseBtn = document.getElementById('lightboxCloseBtn');
 
-  // --- Sound Synthesizer (Apple HIG chimes via Web Audio API) ---
+  // --- Web Audio Chime ---
+  let audioCtx = null;
   function getAudioContext() {
     if (!audioCtx) {
       audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -124,17 +98,8 @@
         gain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
         osc.start(now);
         osc.stop(now + 0.08);
-      } else if (type === 'peer') {
-        osc.type = 'triangle';
-        osc.frequency.setValueAtTime(523.25, now);
-        gain.gain.setValueAtTime(0.06, now);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
-        osc.start(now);
-        osc.stop(now + 0.4);
       }
-    } catch (e) {
-      // AudioContext policy suppression fallback
-    }
+    } catch (e) {}
   }
 
   // --- Sound Mute Toggle ---
@@ -177,11 +142,11 @@
   function detectDefaultName() {
     const type = detectDeviceType();
     const map = {
-      android: 'Android (Telefon)',
+      android: 'Android Cihazım',
       ios: 'iPhone',
-      windows: 'Windows (Quasimodo)',
-      linux: 'Linux (Toshi)',
-      mac: 'MacBook'
+      windows: 'Windows Bilgisayar',
+      linux: 'Linux Cihaz',
+      mac: 'Mac'
     };
     return map[type] || 'kush Cihazı';
   }
@@ -197,38 +162,12 @@
     }
   }
 
-  // Initialize Self Header & Avatar
   selfNameInput.value = myName;
   selfAvatar.textContent = getDeviceIcon(myDeviceType);
-
-  function updateHeaderDeviceTag() {
-    if (headerDeviceName) headerDeviceName.textContent = myName;
-    if (headerDeviceIcon) headerDeviceIcon.textContent = getDeviceIcon(myDeviceType);
-  }
-  updateHeaderDeviceTag();
-
-  if (headerDeviceBtn) {
-    headerDeviceBtn.addEventListener('click', () => {
-      const newName = prompt('Cihazınız için bir ad girin:', myName);
-      if (newName !== null) {
-        const cleanName = newName.trim();
-        if (cleanName) {
-          myName = cleanName;
-          selfNameInput.value = myName;
-          updateHeaderDeviceTag();
-          localStorage.setItem('kush_device_name', myName);
-          if (ws && ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({ type: 'identify', clientId: myClientId, name: myName, deviceType: myDeviceType }));
-          }
-        }
-      }
-    });
-  }
 
   selfNameInput.addEventListener('change', () => {
     myName = selfNameInput.value.trim() || detectDefaultName();
     selfNameInput.value = myName;
-    updateHeaderDeviceTag();
     localStorage.setItem('kush_device_name', myName);
     if (ws && ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify({ type: 'identify', clientId: myClientId, name: myName, deviceType: myDeviceType }));
@@ -287,7 +226,7 @@
         if (data.history && data.history.length > 0) {
           clearWelcome();
           data.history.forEach(item => {
-            if (item.isVoiceNote || item.type === 'voice' || item.type === 'file') {
+            if (item.type === 'file') {
               appendFileCard(item);
             } else {
               appendMessage(item);
@@ -319,8 +258,7 @@
         scrollToBottom();
         if (!checkIsSelf(data.file)) {
           playChime('receive');
-          const notifyDesc = data.file.isVoiceNote ? 'Sesli mesaj gönderdi' : `Dosya paylaştı: ${data.file.originalName}`;
-          notifyIfBackground(data.file.senderName, notifyDesc);
+          notifyIfBackground(data.file.senderName, `Dosya paylaştı: ${data.file.originalName}`);
         }
         break;
 
@@ -342,7 +280,7 @@
     }
   }
 
-  // --- Identity Evaluation (WhatsApp / Instagram DM Alignment) ---
+  // --- Identity Evaluation (WhatsApp / Instagram DM Right-Left Alignment) ---
   function checkIsSelf(item) {
     if (!item) return false;
     if (item.senderClientId && item.senderClientId === myClientId) return true;
@@ -351,7 +289,6 @@
     return false;
   }
 
-  // --- Rendering UI ---
   function clearWelcome() {
     const welcome = document.querySelector('.chat-welcome');
     if (welcome) welcome.remove();
@@ -385,12 +322,8 @@
     
     if (lastMessageDateStr !== dateStr) {
       lastMessageDateStr = dateStr;
-      
       const today = new Date().toLocaleDateString('tr-TR', { year: 'numeric', month: 'long', day: 'numeric' });
-      let displayDate = dateStr;
-      if (dateStr === today) {
-        displayDate = 'Bugün';
-      }
+      let displayDate = (dateStr === today) ? 'Bugün' : dateStr;
 
       const div = document.createElement('div');
       div.className = 'chat-date-divider';
@@ -399,7 +332,7 @@
     }
   }
 
-  // Append Standard Text Message
+  // Append Standard Text Message (Self right, Peer left)
   function appendMessage(msg) {
     appendDateDividerIfNeeded(msg.timestamp);
 
@@ -424,14 +357,9 @@
     messagesContainer.appendChild(row);
   }
 
-  // Append File Card or Voice Note Bubble
+  // Append File Card
   function appendFileCard(file) {
     appendDateDividerIfNeeded(file.uploadedAt || file.timestamp);
-
-    if (file.isVoiceNote || file.type === 'voice') {
-      appendVoiceNote(file);
-      return;
-    }
 
     const isSelf = checkIsSelf(file);
     const row = document.createElement('div');
@@ -470,7 +398,6 @@
       </div>
     `;
 
-    // Lightbox image click trigger
     if (isImage) {
       const img = row.querySelector('.img-preview');
       if (img) {
@@ -479,152 +406,6 @@
         });
       }
     }
-
-    messagesContainer.appendChild(row);
-  }
-
-  // --- Voice Message Rendering (WhatsApp / Telegram style) ---
-  function appendVoiceNote(file) {
-    const isSelf = checkIsSelf(file);
-    const row = document.createElement('div');
-    row.className = `msg-row ${isSelf ? 'self' : 'peer'}`;
-
-    const durationSec = file.duration || 0;
-    const durMins = Math.floor(durationSec / 60);
-    const durRemSec = Math.floor(durationSec % 60);
-    const initialDurationStr = `${durMins}:${durRemSec < 10 ? '0' : ''}${durRemSec}`;
-    const timeFormatted = new Date(file.uploadedAt || file.timestamp || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    const checkmarkHtml = isSelf ? `<span class="msg-check" title="İletildi">✓✓</span>` : '';
-
-    // Generate 26 aesthetic waveform bar heights based on hash of id
-    const barCount = 26;
-    let waveBarsHtml = '';
-    const seed = (file.id || file.url || 'kush').split('').reduce((acc, c) => acc + c.charCodeAt(0), 42);
-    for (let i = 0; i < barCount; i++) {
-      const pseudoHeight = 5 + Math.round((Math.sin(seed + i * 1.3) * 0.5 + 0.5) * 14);
-      waveBarsHtml += `<span class="voice-wave-bar" style="height: ${pseudoHeight}px;" data-index="${i}"></span>`;
-    }
-
-    row.innerHTML = `
-      ${!isSelf ? `<span class="msg-sender">${escapeHtml(file.senderName)}</span>` : ''}
-      <div class="msg-bubble">
-        <div class="voice-bubble">
-          <button type="button" class="voice-play-btn" aria-label="Oynat">
-            <svg class="icon-play" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
-            <svg class="icon-pause hidden" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>
-          </button>
-          <div class="voice-body">
-            <div class="voice-scrubber-wrap" title="İlerletmek için tıklayın">
-              <div class="voice-wave-bars">
-                ${waveBarsHtml}
-              </div>
-            </div>
-            <div class="voice-meta-row">
-              <span class="voice-time-label">${initialDurationStr}</span>
-              <button type="button" class="voice-speed-chip">1x</button>
-            </div>
-          </div>
-        </div>
-        <div class="msg-meta-row">
-          <span class="msg-time">${timeFormatted}</span>
-          ${checkmarkHtml}
-        </div>
-      </div>
-    `;
-
-    // Wire up Voice Audio Controls
-    const playBtn = row.querySelector('.voice-play-btn');
-    const playIcon = row.querySelector('.icon-play');
-    const pauseIcon = row.querySelector('.icon-pause');
-    const timeLabel = row.querySelector('.voice-time-label');
-    const speedChip = row.querySelector('.voice-speed-chip');
-    const scrubberWrap = row.querySelector('.voice-scrubber-wrap');
-    const waveBars = row.querySelectorAll('.voice-wave-bar');
-
-    const audio = new Audio(file.url);
-    audio.preload = 'metadata';
-
-    const speeds = [1, 1.5, 2];
-    let currentSpeedIdx = 0;
-
-    speedChip.addEventListener('click', (e) => {
-      e.stopPropagation();
-      currentSpeedIdx = (currentSpeedIdx + 1) % speeds.length;
-      const speed = speeds[currentSpeedIdx];
-      audio.playbackRate = speed;
-      speedChip.textContent = `${speed}x`;
-    });
-
-    function setPlayingState(playing) {
-      if (playing) {
-        playIcon.classList.add('hidden');
-        pauseIcon.classList.remove('hidden');
-      } else {
-        playIcon.classList.remove('hidden');
-        pauseIcon.classList.add('hidden');
-      }
-    }
-
-    function updateBars(progressRatio) {
-      const activeBarCount = Math.floor(progressRatio * waveBars.length);
-      waveBars.forEach((bar, idx) => {
-        if (idx <= activeBarCount && progressRatio > 0) {
-          bar.classList.add('played');
-        } else {
-          bar.classList.remove('played');
-        }
-      });
-    }
-
-    playBtn.addEventListener('click', () => {
-      if (currentPlayingAudio && currentPlayingAudio !== audio) {
-        currentPlayingAudio.pause();
-        if (currentPlayingBtn) currentPlayingBtn(false);
-      }
-
-      if (audio.paused) {
-        audio.play().then(() => {
-          setPlayingState(true);
-          currentPlayingAudio = audio;
-          currentPlayingBtn = setPlayingState;
-          currentPlayingWave = updateBars;
-        }).catch(err => {
-          console.error('Audio play error:', err);
-        });
-      } else {
-        audio.pause();
-        setPlayingState(false);
-      }
-    });
-
-    audio.addEventListener('timeupdate', () => {
-      const cur = audio.currentTime || 0;
-      const dur = audio.duration || durationSec || 0;
-      const mins = Math.floor(cur / 60);
-      const secs = Math.floor(cur % 60);
-      timeLabel.textContent = `${mins}:${secs < 10 ? '0' : ''}${secs}`;
-      
-      const ratio = dur > 0 ? (cur / dur) : 0;
-      updateBars(ratio);
-    });
-
-    audio.addEventListener('ended', () => {
-      setPlayingState(false);
-      updateBars(0);
-      timeLabel.textContent = initialDurationStr;
-      currentPlayingAudio = null;
-    });
-
-    scrubberWrap.addEventListener('click', (e) => {
-      const rect = scrubberWrap.getBoundingClientRect();
-      const clickX = e.clientX - rect.left;
-      const pct = Math.max(0, Math.min(1, clickX / rect.width));
-      const targetTime = (audio.duration || durationSec) * pct;
-      if (!isNaN(targetTime)) {
-        audio.currentTime = targetTime;
-        updateBars(pct);
-      }
-    });
 
     messagesContainer.appendChild(row);
   }
@@ -651,165 +432,6 @@
       if (e.target.classList.contains('lightbox-backdrop') || e.target === imageLightbox) {
         closeLightbox();
       }
-    });
-  }
-
-  // --- Voice Message Recording (Live MediaRecorder & Web Audio Waveform) ---
-  async function startVoiceRecording() {
-    try {
-      audioStream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true
-        }
-      });
-
-      audioChunks = [];
-      let mimeType = 'audio/webm;codecs=opus';
-      if (!MediaRecorder.isTypeSupported(mimeType)) {
-        mimeType = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' :
-                   MediaRecorder.isTypeSupported('audio/ogg') ? 'audio/ogg' :
-                   MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4' : '';
-      }
-
-      mediaRecorder = mimeType ? new MediaRecorder(audioStream, { mimeType }) : new MediaRecorder(audioStream);
-
-      mediaRecorder.ondataavailable = (e) => {
-        if (e.data && e.data.size > 0) {
-          audioChunks.push(e.data);
-        }
-      };
-
-      // Set up Web Audio Analyser for live pulsating equalizer bars
-      const ctx = getAudioContext();
-      const source = ctx.createMediaStreamSource(audioStream);
-      analyserNode = ctx.createAnalyser();
-      analyserNode.fftSize = 32;
-      source.connect(analyserNode);
-
-      const dataArray = new Uint8Array(analyserNode.frequencyBinCount);
-      const liveBars = voiceWaveformLive ? voiceWaveformLive.querySelectorAll('.wbar') : [];
-
-      function animateLiveWaveform() {
-        if (!mediaRecorder || mediaRecorder.state !== 'recording') return;
-        analyserNode.getByteFrequencyData(dataArray);
-        liveBars.forEach((bar, idx) => {
-          const val = dataArray[idx % dataArray.length] || 10;
-          const height = Math.max(4, Math.min(22, (val / 255) * 22));
-          bar.style.height = `${height}px`;
-        });
-        liveWaveformAnimId = requestAnimationFrame(animateLiveWaveform);
-      }
-
-      mediaRecorder.start(100);
-      recordingStartTime = Date.now();
-
-      // UI Switch
-      standardInputCard.classList.add('hidden');
-      voiceRecordingCard.classList.remove('hidden');
-      voiceDurationText.textContent = '00:00';
-
-      recordingTimerInterval = setInterval(() => {
-        const elapsedSec = Math.floor((Date.now() - recordingStartTime) / 1000);
-        const mins = Math.floor(elapsedSec / 60);
-        const secs = elapsedSec % 60;
-        voiceDurationText.textContent = `${mins < 10 ? '0' : ''}${mins}:${secs < 10 ? '0' : ''}${secs}`;
-      }, 500);
-
-      animateLiveWaveform();
-      playChime('send');
-    } catch (err) {
-      console.error('Microphone access failed:', err);
-      alert('Mikrofon erişimi sağlanamadı. Lütfen tarayıcı izinlerini kontrol edin.');
-    }
-  }
-
-  function cleanupRecording() {
-    if (recordingTimerInterval) {
-      clearInterval(recordingTimerInterval);
-      recordingTimerInterval = null;
-    }
-    if (liveWaveformAnimId) {
-      cancelAnimationFrame(liveWaveformAnimId);
-      liveWaveformAnimId = null;
-    }
-    if (audioStream) {
-      audioStream.getTracks().forEach(t => t.stop());
-      audioStream = null;
-    }
-    voiceRecordingCard.classList.add('hidden');
-    standardInputCard.classList.remove('hidden');
-  }
-
-  function cancelVoiceRecording() {
-    if (mediaRecorder && mediaRecorder.state === 'recording') {
-      mediaRecorder.onstop = null;
-      mediaRecorder.stop();
-    }
-    cleanupRecording();
-    audioChunks = [];
-  }
-
-  function finishAndSendVoiceRecording() {
-    if (!mediaRecorder || mediaRecorder.state !== 'recording') return;
-    const durationSec = Math.max(1, (Date.now() - recordingStartTime) / 1000);
-
-    mediaRecorder.onstop = () => {
-      const mimeType = mediaRecorder.mimeType || 'audio/webm';
-      const audioBlob = new Blob(audioChunks, { type: mimeType });
-      uploadVoiceNote(audioBlob, durationSec, mimeType);
-      cleanupRecording();
-    };
-
-    mediaRecorder.stop();
-  }
-
-  function uploadVoiceNote(blob, durationSec, mimeType) {
-    const xhr = new XMLHttpRequest();
-    xhr.open('POST', '/api/upload', true);
-    
-    const ext = mimeType.includes('ogg') ? 'ogg' : mimeType.includes('mp4') ? 'm4a' : 'webm';
-    const fileName = `Ses_Kaydi_${Date.now()}.${ext}`;
-
-    xhr.setRequestHeader('X-File-Name', encodeURIComponent(fileName));
-    xhr.setRequestHeader('X-File-Type', mimeType);
-    xhr.setRequestHeader('X-Sender-Name', encodeURIComponent(myName));
-    xhr.setRequestHeader('X-Client-Id', myClientId);
-    xhr.setRequestHeader('X-Is-Voice-Note', 'true');
-    xhr.setRequestHeader('X-Voice-Duration', durationSec.toFixed(1));
-
-    xhr.onload = () => {
-      if (xhr.status === 200) {
-        playChime('send');
-      } else {
-        alert('Sesli mesaj gönderilemedi.');
-      }
-    };
-
-    xhr.onerror = () => {
-      alert('Sesli mesaj gönderilirken bağlantı hatası oluştu.');
-    };
-
-    xhr.send(blob);
-  }
-
-  if (voiceNoteBtn) voiceNoteBtn.addEventListener('click', startVoiceRecording);
-  if (cancelVoiceBtn) cancelVoiceBtn.addEventListener('click', cancelVoiceRecording);
-  if (sendVoiceBtn) sendVoiceBtn.addEventListener('click', finishAndSendVoiceRecording);
-
-  // --- Quick Reactions Dock ---
-  if (emojiDock) {
-    emojiDock.querySelectorAll('.btn-emoji').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const emoji = btn.getAttribute('data-emoji');
-        if (emoji) {
-          const cur = messageInput.value;
-          messageInput.value = cur + emoji;
-          messageInput.dispatchEvent(new Event('input'));
-          messageInput.focus();
-        }
-      });
     });
   }
 
@@ -965,89 +587,11 @@
     }
   });
 
-  // --- Voice Dictation (Speech-to-Text via Web Speech API) ---
-  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-  let recognition = null;
-  let isDictating = false;
-
-  if (SpeechRecognition) {
-    recognition = new SpeechRecognition();
-    recognition.lang = 'tr-TR';
-    recognition.continuous = true;
-    recognition.interimResults = true;
-
-    recognition.onstart = () => {
-      isDictating = true;
-      if (micBtn) {
-        micBtn.classList.add('recording');
-        micBtn.title = 'Dinleniyor... (Durdurmak için tıklayın)';
-      }
-      playChime('send');
-    };
-
-    recognition.onresult = (event) => {
-      let interim = '';
-      let finalTranscript = '';
-      for (let i = event.resultIndex; i < event.results.length; ++i) {
-        if (event.results[i].isFinal) {
-          finalTranscript += event.results[i][0].transcript;
-        } else {
-          interim += event.results[i][0].transcript;
-        }
-      }
-      if (finalTranscript) {
-        const cur = messageInput.value;
-        const sep = cur && !cur.endsWith(' ') ? ' ' : '';
-        messageInput.value = cur + sep + finalTranscript.trim();
-        messageInput.dispatchEvent(new Event('input'));
-      }
-    };
-
-    recognition.onerror = (event) => {
-      console.warn('Speech recognition error:', event.error);
-      stopDictation();
-    };
-
-    recognition.onend = () => {
-      stopDictation();
-    };
-  }
-
-  function stopDictation() {
-    isDictating = false;
-    if (micBtn) {
-      micBtn.classList.remove('recording');
-      micBtn.title = 'Sesli Dikte (Konuşarak Yaz)';
-    }
-  }
-
-  if (micBtn) {
-    micBtn.addEventListener('click', () => {
-      if (!recognition) {
-        alert('Cihazınızda web ses tanıma desteklenmiyor. Klavyenizdeki mikrofon tuşunu kullanabilirsiniz.');
-        return;
-      }
-      if (isDictating) {
-        recognition.stop();
-        stopDictation();
-      } else {
-        try {
-          recognition.start();
-        } catch (err) {
-          console.error('Speech start error:', err);
-          stopDictation();
-        }
-      }
-    });
-  }
-
   // --- Global Keyboard Shortcuts ---
   window.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
       if (imageLightbox && !imageLightbox.classList.contains('hidden')) {
         closeLightbox();
-      } else if (voiceRecordingCard && !voiceRecordingCard.classList.contains('hidden')) {
-        cancelVoiceRecording();
       } else if (sidebar && sidebar.classList.contains('open')) {
         sidebar.classList.remove('open');
       }

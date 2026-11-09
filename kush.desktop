@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=kush
+Comment=Yerel Ağ ve Tailscale İletişim Uygulaması
+Exec=bash -c "/home/toshi/kush-linux.sh || xdg-open http://100.69.155.110:8088"
+Icon=network-workgroup
+Terminal=false
+Categories=Network;InstantMessaging;
+StartupWMClass=kush
