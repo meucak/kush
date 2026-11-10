@@ -5,6 +5,16 @@
 (function() {
   'use strict';
 
+  // --- Persistent Device ID Generator (KUSH-XXXX-YYYY) ---
+  function generateDeviceId() {
+    const chars = '0123456789ABCDEF';
+    let p1 = '';
+    let p2 = '';
+    for (let i = 0; i < 4; i++) p1 += chars[Math.floor(Math.random() * chars.length)];
+    for (let i = 0; i < 4; i++) p2 += chars[Math.floor(Math.random() * chars.length)];
+    return `KUSH-${p1}-${p2}`;
+  }
+
   // --- Client Persistent State ---
   let ws = null;
   let myId = null;
@@ -18,12 +28,37 @@
     localStorage.setItem('kush_client_id', myClientTag);
   }
 
+  // Persistent Unique Device ID (KUSH-XXXX-YYYY)
+  let myDeviceId = localStorage.getItem('kush_device_id');
+  if (!myDeviceId || !/^KUSH-[A-Z0-9]{4}-[A-Z0-9]{4}$/i.test(myDeviceId)) {
+    myDeviceId = generateDeviceId();
+    localStorage.setItem('kush_device_id', myDeviceId);
+  }
+  localStorage.removeItem('kush_user_tc');
+
+  // Network Device Name Tags (Authoritative Network Registry)
+  let networkDeviceNames = {};
+  try {
+    networkDeviceNames = JSON.parse(localStorage.getItem('kush_network_device_names') || '{}');
+  } catch (e) {
+    networkDeviceNames = {};
+  }
+
+  // Device Aliases / Takma İsimler (Adres Defteri - Local Fallback)
+  let deviceAliases = {};
+  try {
+    deviceAliases = JSON.parse(localStorage.getItem('kush_device_aliases') || '{}');
+  } catch (e) {
+    deviceAliases = {};
+  }
+
   let myDeviceType = detectDeviceType();
-  let myName = localStorage.getItem('kush_device_name') || detectDefaultName();
+  let myName = networkDeviceNames[myDeviceId] || localStorage.getItem('kush_device_name') || detectDefaultName();
   let isMuted = localStorage.getItem('kush_muted') === 'true';
   let activePeers = [];
   let isTypingTimeout = null;
   let lastMessageDateStr = null;
+  const sentMsgIds = new Set();
 
   // Local Offline Outbox (kept only when offline/unreachable)
   let offlineQueue = [];
@@ -44,9 +79,35 @@
   const connectionStatus = document.getElementById('connectionStatus');
   const peerList = document.getElementById('peerList');
   const peerCountBadge = document.getElementById('peerCountBadge');
-  const selfNameInput = document.getElementById('selfNameInput');
+  
+  // Profile & Identity Elements
+  const selfCardBtn = document.getElementById('selfCardBtn');
   const selfAvatar = document.getElementById('selfAvatar');
+  const selfDisplayName = document.getElementById('selfDisplayName');
+  const selfIdChip = document.getElementById('selfIdChip');
   const selfIp = document.getElementById('selfIp');
+  const openProfileBtn = document.getElementById('openProfileBtn');
+  const headerProfileBtn = document.getElementById('headerProfileBtn');
+  const headerIdLabel = document.getElementById('headerIdLabel');
+
+  const profileModal = document.getElementById('profileModal');
+  const closeProfileModalBtn = document.getElementById('closeProfileModalBtn');
+  const cancelProfileBtn = document.getElementById('cancelProfileBtn');
+  const saveProfileBtn = document.getElementById('saveProfileBtn');
+  const profileNameInput = document.getElementById('profileNameInput');
+  const profileIdInput = document.getElementById('profileIdInput');
+  const copyIdBtn = document.getElementById('copyIdBtn');
+  const generateIdBtn = document.getElementById('generateIdBtn');
+  const deviceAliasList = document.getElementById('deviceAliasList');
+
+  const idModalAvatar = document.getElementById('idModalAvatar');
+  const idModalCardName = document.getElementById('idModalCardName');
+  const idModalCardId = document.getElementById('idModalCardId');
+  const idModalCardDevice = document.getElementById('idModalCardDevice');
+  const idModalCardTag = document.getElementById('idModalCardTag');
+  const idSystemPill = document.getElementById('idSystemPill');
+  const idIpPill = document.getElementById('idIpPill');
+
   const sidebar = document.getElementById('sidebar');
   const sidebarToggle = document.getElementById('sidebarToggle');
   const themeToggle = document.getElementById('themeToggle');
@@ -165,17 +226,213 @@
     }
   }
 
-  selfNameInput.value = myName;
-  selfAvatar.textContent = getDeviceIcon(myDeviceType);
-
-  selfNameInput.addEventListener('change', () => {
-    myName = selfNameInput.value.trim() || detectDefaultName();
-    selfNameInput.value = myName;
-    localStorage.setItem('kush_device_name', myName);
-    if (ws && ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ type: 'identify', clientTag: myClientTag, clientId: myClientTag, name: myName, deviceType: myDeviceType }));
+  // --- Authoritative Network Device Name Resolution ---
+  function getDisplayNameForDevice(deviceId, defaultName) {
+    if (deviceId && networkDeviceNames[deviceId]) {
+      return networkDeviceNames[deviceId];
     }
-  });
+    if (deviceId && deviceAliases[deviceId]) {
+      return deviceAliases[deviceId];
+    }
+    return defaultName || 'Cihaz';
+  }
+
+  // --- Network Device Name Tag Dispatcher ---
+  function setNetworkDeviceName(targetDeviceId, customName) {
+    const devId = (targetDeviceId || '').trim();
+    const cleanName = (customName || '').trim().slice(0, 48);
+    if (!devId) return;
+
+    if (cleanName) {
+      networkDeviceNames[devId] = cleanName;
+      deviceAliases[devId] = cleanName;
+    } else {
+      delete networkDeviceNames[devId];
+      delete deviceAliases[devId];
+    }
+    localStorage.setItem('kush_network_device_names', JSON.stringify(networkDeviceNames));
+    localStorage.setItem('kush_device_aliases', JSON.stringify(deviceAliases));
+
+    if (devId === myDeviceId) {
+      myName = cleanName || detectDefaultName();
+      localStorage.setItem('kush_device_name', myName);
+      updateIdentityUI();
+    }
+
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({
+        type: 'set_device_name',
+        targetDeviceId: devId,
+        customName: cleanName
+      }));
+    }
+    renderPeerList();
+    renderDeviceAliasesUI();
+  }
+
+  function renderDeviceAliasesUI() {
+    if (!deviceAliasList) return;
+    const knownDevices = new Map();
+    activePeers.forEach(p => {
+      const devId = p.deviceId || p.clientTag || p.clientId;
+      if (devId && devId !== myDeviceId) {
+        knownDevices.set(devId, p.name || 'Ağdaki Cihaz');
+      }
+    });
+    // Add any devices registered in networkDeviceNames or local aliases
+    Object.keys(networkDeviceNames).forEach(devId => {
+      if (devId !== myDeviceId && !knownDevices.has(devId)) {
+        knownDevices.set(devId, 'Kayıtlı Cihaz (Çevrimdışı)');
+      }
+    });
+    Object.keys(deviceAliases).forEach(devId => {
+      if (devId !== myDeviceId && !knownDevices.has(devId)) {
+        knownDevices.set(devId, 'Kayıtlı Cihaz (Çevrimdışı)');
+      }
+    });
+
+    if (knownDevices.size === 0) {
+      deviceAliasList.innerHTML = '<p class="text-caption text-dim">Ağda henüz başka cihaz algılanmadı.</p>';
+      return;
+    }
+
+    deviceAliasList.innerHTML = '';
+    knownDevices.forEach((origName, devId) => {
+      const itemEl = document.createElement('div');
+      itemEl.className = 'device-alias-item';
+      const curNameTag = networkDeviceNames[devId] || deviceAliases[devId] || '';
+      itemEl.innerHTML = `
+        <div class="alias-meta">
+          <span class="alias-dev-name">${escapeHtml(origName)}</span>
+          <span class="alias-dev-id font-mono">${escapeHtml(devId)}</span>
+        </div>
+        <input type="text" class="input-text alias-input" placeholder="Tüm ağda görünecek isim ver (Örn: Gocayörük)" value="${escapeHtml(curNameTag)}" data-devid="${escapeHtml(devId)}">
+      `;
+      const input = itemEl.querySelector('.alias-input');
+      input.addEventListener('change', () => {
+        setNetworkDeviceName(devId, input.value);
+      });
+      deviceAliasList.appendChild(itemEl);
+    });
+  }
+
+  // --- Identity UI Synchronization ---
+  function updateIdentityUI() {
+    if (selfDisplayName) selfDisplayName.textContent = myName;
+    if (selfIdChip) selfIdChip.textContent = `ID: ${myDeviceId}`;
+    if (headerIdLabel) headerIdLabel.textContent = `ID: ${myDeviceId.slice(-4)}`;
+    if (selfAvatar) selfAvatar.textContent = getDeviceIcon(myDeviceType);
+
+    if (idModalAvatar) idModalAvatar.textContent = getDeviceIcon(myDeviceType);
+    if (idModalCardName) idModalCardName.textContent = myName;
+    if (idModalCardId) idModalCardId.textContent = `ID: ${myDeviceId}`;
+    if (idModalCardDevice) idModalCardDevice.textContent = `${myDeviceType.toUpperCase()} • ${myIp || 'Yerel Ağ'}`;
+    if (idModalCardTag) idModalCardTag.textContent = `İmza: ${myDeviceId}`;
+
+    if (idSystemPill) idSystemPill.textContent = `Sistem: ${myDeviceType.toUpperCase()}`;
+    if (idIpPill) idIpPill.textContent = `IP: ${myIp || 'Bağlanıyor...'}`;
+
+    renderDeviceAliasesUI();
+  }
+  updateIdentityUI();
+
+  // --- Profile & Digital Identity Modal Handlers ---
+  function openProfileModal() {
+    if (!profileModal) return;
+    profileNameInput.value = myName;
+    profileIdInput.value = myDeviceId;
+    updateIdentityUI();
+    profileModal.classList.remove('hidden');
+    profileNameInput.focus();
+  }
+
+  function closeProfileModal() {
+    if (!profileModal) return;
+    profileModal.classList.add('hidden');
+  }
+
+  if (selfCardBtn) selfCardBtn.addEventListener('click', openProfileModal);
+  if (openProfileBtn) openProfileBtn.addEventListener('click', e => { e.stopPropagation(); openProfileModal(); });
+  if (headerProfileBtn) headerProfileBtn.addEventListener('click', openProfileModal);
+  if (closeProfileModalBtn) closeProfileModalBtn.addEventListener('click', closeProfileModal);
+  if (cancelProfileBtn) cancelProfileBtn.addEventListener('click', closeProfileModal);
+
+  if (profileModal) {
+    profileModal.addEventListener('click', e => {
+      if (e.target === profileModal) closeProfileModal();
+    });
+  }
+
+  if (profileNameInput) {
+    profileNameInput.addEventListener('input', () => {
+      if (idModalCardName) idModalCardName.textContent = profileNameInput.value.trim() || myName;
+    });
+  }
+
+  if (profileIdInput) {
+    profileIdInput.addEventListener('input', () => {
+      profileIdInput.value = profileIdInput.value.toUpperCase();
+      if (idModalCardId) idModalCardId.textContent = `ID: ${profileIdInput.value || myDeviceId}`;
+    });
+  }
+
+  if (generateIdBtn) {
+    generateIdBtn.addEventListener('click', () => {
+      const newId = generateDeviceId();
+      if (profileIdInput) profileIdInput.value = newId;
+      if (idModalCardId) idModalCardId.textContent = `ID: ${newId}`;
+    });
+  }
+
+  if (copyIdBtn) {
+    copyIdBtn.addEventListener('click', async () => {
+      const idVal = profileIdInput ? profileIdInput.value.trim() : myDeviceId;
+      try {
+        await navigator.clipboard.writeText(idVal);
+        copyIdBtn.textContent = 'Kopyalandı!';
+        setTimeout(() => { copyIdBtn.textContent = 'Kopyala'; }, 1500);
+      } catch (_) {}
+    });
+  }
+
+  if (saveProfileBtn) {
+    saveProfileBtn.addEventListener('click', () => {
+      const newName = (profileNameInput.value.trim() || myName).slice(0, 32);
+      let newId = (profileIdInput.value.trim() || myDeviceId).toUpperCase();
+
+      if (!/^KUSH-[A-Z0-9]{4}-[A-Z0-9]{4}$/i.test(newId)) {
+        alert('Cihaz ID formatı "KUSH-XXXX-YYYY" şeklinde olmalıdır (Örn: KUSH-A1B2-C3D4).');
+        profileIdInput.focus();
+        return;
+      }
+
+      myName = newName;
+      myDeviceId = newId;
+      localStorage.setItem('kush_device_name', myName);
+      localStorage.setItem('kush_device_id', myDeviceId);
+      networkDeviceNames[myDeviceId] = myName;
+      localStorage.setItem('kush_network_device_names', JSON.stringify(networkDeviceNames));
+      updateIdentityUI();
+      closeProfileModal();
+
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({
+          type: 'set_device_name',
+          targetDeviceId: myDeviceId,
+          customName: myName
+        }));
+        ws.send(JSON.stringify({
+          type: 'identify',
+          deviceId: myDeviceId,
+          senderDeviceId: myDeviceId,
+          clientTag: myClientTag,
+          clientId: myClientTag,
+          name: myName,
+          deviceType: myDeviceType
+        }));
+      }
+    });
+  }
 
   // --- WebSocket Connection & Offline Queue Flush ---
   function connect() {
@@ -189,6 +446,8 @@
       updateStatus('connected', 'Bağlandı');
       ws.send(JSON.stringify({
         type: 'identify',
+        deviceId: myDeviceId,
+        senderDeviceId: myDeviceId,
         clientTag: myClientTag,
         clientId: myClientTag,
         name: myName,
@@ -236,6 +495,8 @@
       ws.send(JSON.stringify({
         type: 'chat_message',
         id: item.id,
+        deviceId: myDeviceId,
+        senderDeviceId: myDeviceId,
         clientTag: myClientTag,
         clientId: myClientTag,
         text: item.text,
@@ -249,6 +510,15 @@
       case 'init':
         myId = data.yourId;
         myIp = data.yourIp;
+        if (data.deviceNames && typeof data.deviceNames === 'object') {
+          networkDeviceNames = Object.assign({}, networkDeviceNames, data.deviceNames);
+          localStorage.setItem('kush_network_device_names', JSON.stringify(networkDeviceNames));
+          if (networkDeviceNames[myDeviceId]) {
+            myName = networkDeviceNames[myDeviceId];
+            localStorage.setItem('kush_device_name', myName);
+          }
+        }
+        updateIdentityUI();
         selfIp.textContent = myIp;
         messagesContainer.innerHTML = '';
         lastMessageDateStr = null;
@@ -282,6 +552,28 @@
       case 'peer_list':
         activePeers = data.peers || [];
         renderPeerList();
+        break;
+
+      case 'device_name_updated':
+        if (data.deviceNames && typeof data.deviceNames === 'object') {
+          networkDeviceNames = data.deviceNames;
+        } else if (data.targetDeviceId) {
+          if (data.customName) {
+            networkDeviceNames[data.targetDeviceId] = data.customName;
+          } else {
+            delete networkDeviceNames[data.targetDeviceId];
+          }
+        }
+        localStorage.setItem('kush_network_device_names', JSON.stringify(networkDeviceNames));
+
+        // If this device was renamed remotely:
+        if (data.targetDeviceId === myDeviceId) {
+          myName = data.customName || detectDefaultName();
+          localStorage.setItem('kush_device_name', myName);
+          updateIdentityUI();
+        }
+        renderPeerList();
+        renderDeviceAliasesUI();
         break;
 
       case 'new_message':
@@ -345,26 +637,34 @@
     }
   }
 
-  // --- Identity & Alignment (Self is on Right, Both for Past & Present) ---
+  // --- Identity & Alignment (Definitive, Device ID Matching) ---
   function checkIsSelf(item) {
     if (!item) return false;
-    // 1. Direct persistent client tag/ID match
-    if (item.clientTag && item.clientTag === myClientTag) return true;
-    if (item.senderClientId && item.senderClientId === myClientTag) return true;
-    if (item.senderId && item.senderId === myId) return true;
-    // 2. Exact sender name match
-    if (item.senderName && item.senderName.trim().toLowerCase() === myName.trim().toLowerCase()) return true;
-    // 3. Historical deviceType fallback (on phone, past android msgs are on right; on Toshi, past linux msgs are on right)
-    if (myDeviceType === 'android') {
-      if (item.deviceType === 'android') return true;
-      if (item.senderName && item.senderName.toLowerCase().includes('android')) return true;
-    } else if (myDeviceType === 'linux') {
-      if (item.deviceType === 'linux') return true;
-      if (item.senderName && (item.senderName.toLowerCase().includes('linux') || item.senderName.toLowerCase().includes('toshi'))) return true;
-    } else if (myDeviceType === 'windows') {
-      if (item.deviceType === 'windows') return true;
-      if (item.senderName && (item.senderName.toLowerCase().includes('windows') || item.senderName.toLowerCase().includes('quasimodo'))) return true;
+
+    // 1. Primary rule: Explicit Device ID match
+    const itemDevId = item.deviceId || item.senderDeviceId;
+    if (itemDevId && myDeviceId && itemDevId === myDeviceId) {
+      return true;
     }
+
+    // 2. Client-side optimistic locally sent message IDs
+    if (item.id && sentMsgIds.has(item.id)) {
+      return true;
+    }
+
+    // 3. Persistent clientTag match (fallback for active sessions)
+    const tag = item.clientTag || item.senderClientId || item.clientId;
+    if (tag && myClientTag && tag === myClientTag) {
+      return true;
+    }
+
+    // 4. Active WebSocket session ID match
+    if (item.senderId && myId && item.senderId === myId) {
+      return true;
+    }
+
+    // CRITICAL FIX: NEVER compare generic deviceType ('linux' === 'linux')!
+    // Any other device, even if running Linux, is a PEER (rendered on the LEFT)!
     return false;
   }
 
@@ -378,17 +678,37 @@
     peerCountBadge.textContent = activePeers.length;
 
     activePeers.forEach(peer => {
-      const isMe = peer.id === myId || peer.clientId === myClientTag || peer.clientTag === myClientTag;
+      const isMe = checkIsSelf(peer) || (peer.deviceId && peer.deviceId === myDeviceId) || peer.id === myId;
+      const peerDevId = peer.deviceId || peer.clientTag || '';
+      const displayName = isMe ? `${myName} (Bu Cihaz)` : getDisplayNameForDevice(peerDevId, peer.name);
       const li = document.createElement('li');
       li.className = 'peer-item';
       li.innerHTML = `
         <span class="peer-avatar">${getDeviceIcon(peer.deviceType)}</span>
         <div class="peer-info">
-          <span class="peer-name">${escapeHtml(peer.name)} ${isMe ? '(Siz)' : ''}</span>
-          <span class="peer-sub">${escapeHtml(peer.ip)}</span>
+          <div class="peer-meta-row">
+            <span class="peer-name">${escapeHtml(displayName)}</span>
+            ${peerDevId ? `<span class="peer-id-badge font-mono" title="Cihaz ID: ${escapeHtml(peerDevId)}">${escapeHtml(peerDevId)}</span>` : ''}
+          </div>
+          <span class="peer-sub">${escapeHtml(peer.ip || '')}</span>
         </div>
+        ${!isMe && peerDevId ? `<button class="peer-rename-btn" title="Cihazın Ağ Adını Değiştir" data-devid="${escapeHtml(peerDevId)}" data-curname="${escapeHtml(networkDeviceNames[peerDevId] || peer.name || '')}">✏️</button>` : ''}
         <span class="status-dot"></span>
       `;
+
+      const renameBtn = li.querySelector('.peer-rename-btn');
+      if (renameBtn) {
+        renameBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const targetId = renameBtn.getAttribute('data-devid');
+          const curVal = renameBtn.getAttribute('data-curname');
+          const promptRes = prompt(`"${curVal || targetId}" cihazına verilecek yeni ağ adını girin:\n(Bu isim tüm cihazlarda geçerli olacaktır)`, curVal);
+          if (promptRes !== null) {
+            setNetworkDeviceName(targetId, promptRes);
+          }
+        });
+      }
+
       peerList.appendChild(li);
     });
   }
@@ -446,7 +766,13 @@
     }
 
     row.innerHTML = `
-      ${!isSelf ? `<span class="msg-sender">${escapeHtml(msg.senderName)}</span>` : ''}
+      ${!isSelf ? `
+        <div class="msg-sender-header">
+          <span class="msg-sender-name">${escapeHtml(getDisplayNameForDevice(msg.deviceId || msg.senderDeviceId, msg.senderName || 'Cihaz'))}</span>
+          ${(msg.deviceId || msg.senderDeviceId) ? `<span class="msg-sender-id font-mono" title="Cihaz ID">${escapeHtml(msg.deviceId || msg.senderDeviceId)}</span>` : ''}
+          <span class="msg-sender-badge">${getDeviceIcon(msg.deviceType)}</span>
+        </div>
+      ` : ''}
       <div class="msg-bubble">
         <div class="msg-content">${formatMessageText(msg.text)}</div>
         <div class="msg-meta-row">
@@ -526,7 +852,13 @@
       }
 
       row.innerHTML = `
-        ${!isSelf ? `<span class="msg-sender">${escapeHtml(file.senderName || 'Ağdaki Cihaz')}</span>` : ''}
+        ${!isSelf ? `
+          <div class="msg-sender-header">
+            <span class="msg-sender-name">${escapeHtml(getDisplayNameForDevice(file.deviceId || file.senderDeviceId, file.senderName || 'Ağdaki Cihaz'))}</span>
+            ${(file.deviceId || file.senderDeviceId) ? `<span class="msg-sender-id font-mono" title="Cihaz ID">${escapeHtml(file.deviceId || file.senderDeviceId)}</span>` : ''}
+            <span class="msg-sender-badge">${getDeviceIcon(file.deviceType)}</span>
+          </div>
+        ` : ''}
         <div class="msg-bubble">
           <div class="file-card file-${fileInfo.typeClass}">
             <div class="file-icon file-badge-${fileInfo.typeClass}">
@@ -616,6 +948,8 @@
 
     const localMsg = {
       id: msgId,
+      deviceId: myDeviceId,
+      senderDeviceId: myDeviceId,
       clientTag: myClientTag,
       senderClientId: myClientTag,
       senderName: myName,
@@ -624,6 +958,7 @@
       timestamp: Date.now(),
       isPending: !isConnected
     };
+    sentMsgIds.add(msgId);
 
     // Immediately render in chat
     clearWelcome();
@@ -637,6 +972,8 @@
       ws.send(JSON.stringify({
         type: 'chat_message',
         id: msgId,
+        deviceId: myDeviceId,
+        senderDeviceId: myDeviceId,
         clientTag: myClientTag,
         clientId: myClientTag,
         text: text,
@@ -694,9 +1031,11 @@
       xhr.setRequestHeader('X-File-Name', encodeURIComponent(file.name));
       xhr.setRequestHeader('X-File-Type', file.type || 'application/octet-stream');
       xhr.setRequestHeader('X-Sender-Name', encodeURIComponent(myName));
+      xhr.setRequestHeader('X-Device-Id', myDeviceId);
       xhr.setRequestHeader('X-Client-Id', myClientTag);
       xhr.setRequestHeader('X-Client-Tag', myClientTag);
       xhr.setRequestHeader('X-Device-Type', myDeviceType);
+      sentMsgIds.add(file.name);
 
       uploadProgressCard.classList.remove('hidden');
       uploadFileName.textContent = file.name;
@@ -774,11 +1113,21 @@
   // --- Global Keyboard Shortcuts ---
   window.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
-      if (imageLightbox && !imageLightbox.classList.contains('hidden')) {
+      if (profileModal && !profileModal.classList.contains('hidden')) {
+        closeProfileModal();
+      } else if (imageLightbox && !imageLightbox.classList.contains('hidden')) {
         closeLightbox();
       } else if (sidebar && sidebar.classList.contains('open')) {
         sidebar.classList.remove('open');
       }
+    }
+  });
+
+  // --- Background Visibility & Zero-CPU Optimization ---
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+      // In background: ensure all pending audio contexts are closed, skip non-essential animations
+      if (isTypingTimeout) clearTimeout(isTypingTimeout);
     }
   });
 

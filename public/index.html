@@ -19,7 +19,7 @@
   <link rel="apple-touch-icon" href="/icons/icon-192.png">
   <link rel="icon" type="image/svg+xml" href="/icons/icon.svg">
 
-  <link rel="stylesheet" href="/style.css?v=2.5">
+  <link rel="stylesheet" href="/style.css?v=3.0">
 </head>
 <body class="theme-dark">
   <div id="app" class="app-container">
@@ -50,6 +50,10 @@
       </div>
 
       <div class="header-right">
+        <button id="headerProfileBtn" class="btn btn-secondary btn-sm" title="Cihaz & Kullanıcı Kimliği">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="16" rx="3"></rect><circle cx="9" cy="10" r="2"></circle><line x1="15" y1="8" x2="17" y2="8"></line><line x1="15" y1="12" x2="17" y2="12"></line><line x1="7" y1="16" x2="17" y2="16"></line></svg>
+          <span class="btn-label" id="headerIdLabel">Kimlik</span>
+        </button>
         <button id="soundToggleBtn" class="btn-icon" aria-label="Sesi Kapat/Aç" title="Bildirim Sesleri Açık">
           <svg class="icon-sound-on" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
           <svg class="icon-sound-off hidden" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><line x1="23" y1="9" x2="17" y2="15"></line><line x1="17" y1="9" x2="23" y2="15"></line></svg>
@@ -71,12 +75,18 @@
       <!-- Sidebar: Active Peers & Quick Tools -->
       <aside id="sidebar" class="sidebar">
         <!-- Self Device Info Card -->
-        <div class="self-card">
+        <div class="self-card" id="selfCardBtn" role="button" tabindex="0" title="Cihaz ve Kullanıcı Kimlik Kartınızı açmak için tıklayın">
           <div class="avatar-ring" id="selfAvatar">💻</div>
           <div class="self-meta">
-            <input type="text" id="selfNameInput" class="input-inline" value="Cihazım" maxlength="24" title="Cihaz adınızı değiştirmek için tıklayın">
+            <div class="self-name-row">
+              <span id="selfDisplayName" class="self-name">Cihazım</span>
+              <span class="id-badge-chip" id="selfIdChip">ID: KUSH-0000</span>
+            </div>
             <span id="selfIp" class="text-caption text-dim">127.0.0.1</span>
           </div>
+          <button id="openProfileBtn" class="btn-icon btn-sm" aria-label="Kimlik Kartı" title="Kimlik Kartı">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+          </button>
         </div>
 
         <!-- Section: Active Network Peers -->
@@ -184,6 +194,90 @@
       </div>
     </div>
 
+    <!-- Kush Device & User Identity Modal -->
+    <div id="profileModal" class="modal-backdrop hidden">
+      <div class="modal-card id-card-modal">
+        <div class="id-card-header">
+          <div class="id-header-title">
+            <div class="id-chip-icon">🪪</div>
+            <div>
+              <h3>Cihaz & Kullanıcı Kimliği</h3>
+              <span class="id-subtitle">Ağ İçi Benzersiz Cihaz ID ve Kullanıcı Adı</span>
+            </div>
+          </div>
+          <button id="closeProfileModalBtn" class="btn-icon" aria-label="Kapat">✕</button>
+        </div>
+
+        <div class="id-card-body">
+          <!-- Card Graphic -->
+          <div class="digital-id-visual">
+            <div class="id-visual-top">
+              <span class="id-org">KUSH DEVICE IDENTITY</span>
+              <span class="id-status-badge">● AKTİF</span>
+            </div>
+            <div class="id-visual-mid">
+              <div class="id-visual-avatar" id="idModalAvatar">🐧</div>
+              <div class="id-visual-info">
+                <span class="id-visual-name" id="idModalCardName">Kullanıcı</span>
+                <span class="id-visual-id" id="idModalCardId">ID: KUSH-XXXX-YYYY</span>
+                <span class="id-visual-device" id="idModalCardDevice">Linux • 100.x.x.x</span>
+              </div>
+            </div>
+            <div class="id-visual-bottom">
+              <span class="id-tag-label" id="idModalCardTag">Cihaz İmzası</span>
+              <span class="id-security-chip">DOĞRULANMIŞ CİHAZ</span>
+            </div>
+          </div>
+
+          <!-- Form Fields -->
+          <div class="form-group">
+            <label for="profileNameInput" class="form-label">Kullanıcı Adı / Cihaz İsmi</label>
+            <input type="text" id="profileNameInput" class="input-text" maxlength="32" placeholder="Örn: Toshi, Semsettin, Kasa">
+            <span class="form-hint">Bu cihaza ait kullanıcı adınızdır. Mesajlarınız bu isimle görünür.</span>
+          </div>
+
+          <div class="form-group">
+            <div class="form-label-row">
+              <label for="profileIdInput" class="form-label">Benzersiz Cihaz ID (Kush Device ID)</label>
+              <span class="id-status-valid">✓ Benzersiz Donanım İmzası</span>
+            </div>
+            <div class="input-action-group">
+              <input type="text" id="profileIdInput" class="input-text font-mono" maxlength="24" placeholder="KUSH-XXXX-YYYY">
+              <button id="copyIdBtn" class="btn btn-secondary btn-sm" title="ID Kopyala">Kopyala</button>
+              <button id="generateIdBtn" class="btn btn-secondary btn-sm" title="Yeni Benzersiz Cihaz ID Üret">🎲 Yeni ID</button>
+            </div>
+            <span class="form-hint">Her mesaj bu cihaz ID'si ile damgalanır. Açık olan cihaz bu ID ile eşleştiğinde mesajlar sağ tarafta, diğer tüm cihazlarda sol tarafta gösterilir.</span>
+          </div>
+
+          <!-- Cihazlara Özel İsim Atama (Adres Defteri) -->
+          <div class="form-group">
+            <label class="form-label">Ağdaki Diğer Cihazlara Özel İsim Ver (Takma Ad)</label>
+            <div id="deviceAliasList" class="device-alias-box">
+              <p class="text-caption text-dim">Ağdaki cihazlar bağlandıkça burada listelenir.</p>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Sistem & Bağlantı Bilgisi</label>
+            <div class="system-info-pills">
+              <span class="info-pill" id="idSystemPill">Sistem: Linux</span>
+              <span class="info-pill" id="idIpPill">IP: 127.0.0.1</span>
+            </div>
+          </div>
+
+          <div class="form-group startup-info-box">
+            <div class="startup-title">⚡ Sıfır CPU & Düşük RAM Modu (Arka Plan Nöbetçisi)</div>
+            <p class="startup-desc">Kush'ı arka planda 0% CPU ve ~13 MB RAM ile çalıştırmak için terminalde <code>kush --autostart</code> komutunu çalıştırabilirsiniz. Ağdan bir mesaj geldiğinde anında masaüstü bildirimi alırsınız.</p>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button id="cancelProfileBtn" class="btn btn-secondary">Vazgeç</button>
+          <button id="saveProfileBtn" class="btn btn-primary">Kaydet ve Kimliği Uygula</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Drag Overlay Window Wide -->
     <div id="dragOverlay" class="drag-overlay hidden">
       <div class="drag-modal">
@@ -195,6 +289,6 @@
 
   </div>
 
-  <script src="/app.js?v=2.5"></script>
+  <script src="/app.js?v=3.0"></script>
 </body>
 </html>

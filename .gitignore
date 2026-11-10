@@ -8,3 +8,5 @@ server/uploads/*
 android/app/build/
 android/.gradle/
 *.idsig
+__pycache__/
+*.pyc

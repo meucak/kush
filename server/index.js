@@ -19,12 +19,40 @@ if (!fs.existsSync(LOGS_DIR)) {
 
 const CHAT_LOG_FILE = path.join(LOGS_DIR, 'chat_history.json');
 const READABLE_LOG_FILE = path.join(LOGS_DIR, 'chat_history.txt');
+const DEVICE_NAMES_FILE = path.join(LOGS_DIR, 'device_names.json');
 
 // In-memory state
 const peers = new Map(); // ws -> { id, clientId, name, deviceType, ip, joinedAt, lastSeen }
+const deviceNames = new Map(); // deviceId -> customName (Authoritative Network Registry)
 const messageHistory = []; // last 150 messages
 const MAX_HISTORY = 150;
 let sharedClipboard = { text: '', sender: 'System', updatedAt: Date.now() };
+
+// Load persisted device names on startup
+if (fs.existsSync(DEVICE_NAMES_FILE)) {
+  try {
+    const raw = fs.readFileSync(DEVICE_NAMES_FILE, 'utf8');
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === 'object') {
+      for (const [k, v] of Object.entries(parsed)) {
+        if (typeof v === 'string' && v.trim()) {
+          deviceNames.set(k, v.trim().slice(0, 48));
+        }
+      }
+    }
+  } catch (err) {
+    console.error('Failed to load device names:', err);
+  }
+}
+
+function persistDeviceNames() {
+  try {
+    const obj = Object.fromEntries(deviceNames);
+    fs.writeFileSync(DEVICE_NAMES_FILE, JSON.stringify(obj, null, 2), 'utf8');
+  } catch (err) {
+    console.error('Failed to persist device names:', err);
+  }
+}
 
 // Load persisted history on startup
 if (fs.existsSync(CHAT_LOG_FILE)) {
@@ -44,15 +72,16 @@ function persistMessages() {
     fs.writeFileSync(CHAT_LOG_FILE, JSON.stringify(messageHistory, null, 2), 'utf8');
     const readable = messageHistory.map(m => {
       const time = new Date(m.timestamp).toLocaleString('tr-TR');
+      const idStr = m.deviceId ? ` [ID: ${m.deviceId}]` : '';
       if (m.isVoiceNote || m.type === 'voice') {
         const mins = Math.floor((m.duration || 0) / 60);
         const secs = Math.floor((m.duration || 0) % 60);
         const durStr = `${mins}:${secs < 10 ? '0' : ''}${secs}`;
-        return `[${time}] ${m.senderName} (${m.deviceType || 'cihaz'}) [SESLİ MESAJ (${durStr})]: ${m.url}`;
+        return `[${time}] ${m.senderName}${idStr} (${m.deviceType || 'cihaz'}) [SESLİ MESAJ (${durStr})]: ${m.url}`;
       } else if (m.type === 'file') {
-        return `[${time}] ${m.senderName} (${m.deviceType || 'cihaz'}) [DOSYA]: ${m.originalName} (${(m.size / 1024).toFixed(1)} KB) -> ${m.url}`;
+        return `[${time}] ${m.senderName}${idStr} (${m.deviceType || 'cihaz'}) [DOSYA]: ${m.originalName} (${(m.size / 1024).toFixed(1)} KB) -> ${m.url}`;
       }
-      return `[${time}] ${m.senderName} (${m.deviceType || 'cihaz'}): ${m.text}`;
+      return `[${time}] ${m.senderName}${idStr} (${m.deviceType || 'cihaz'}): ${m.text}`;
     }).join('\n');
     fs.writeFileSync(READABLE_LOG_FILE, readable, 'utf8');
   } catch (err) {
@@ -102,7 +131,7 @@ const server = http.createServer((req, res) => {
   // CORS & Security Headers
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Range, X-File-Name, X-File-Type, X-Sender-Name, X-Client-Id, X-Is-Voice-Note, X-Voice-Duration');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Range, X-File-Name, X-File-Type, X-Sender-Name, X-Device-Id, X-Device-Name, X-Client-Id, X-Client-Tag, X-Device-Type, X-Is-Voice-Note, X-Voice-Duration');
 
   if (req.method === 'OPTIONS') {
     res.writeHead(204);
@@ -122,8 +151,56 @@ const server = http.createServer((req, res) => {
       uptime: process.uptime(),
       addresses: getNetworkAddresses(),
       activePeers: peers.size,
-      sharedClipboard
+      sharedClipboard,
+      deviceNames: Object.fromEntries(deviceNames)
     }));
+    return;
+  }
+
+  // --- API: Device Names (Get & Set) ---
+  if (pathname === '/api/device-names' && req.method === 'GET') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ success: true, deviceNames: Object.fromEntries(deviceNames) }));
+    return;
+  }
+  if (pathname === '/api/device-names' && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', () => {
+      try {
+        const payload = JSON.parse(body);
+        const targetDeviceId = (payload.targetDeviceId || '').trim();
+        const customName = (payload.customName || '').trim().slice(0, 48);
+        if (targetDeviceId) {
+          if (customName) {
+            deviceNames.set(targetDeviceId, customName);
+          } else {
+            deviceNames.delete(targetDeviceId);
+          }
+          persistDeviceNames();
+          for (const [, peer] of peers) {
+            if (peer.deviceId === targetDeviceId || peer.clientId === targetDeviceId) {
+              peer.name = customName || peer.deviceName || `Peer-${peer.id.slice(0, 4)}`;
+            }
+          }
+          broadcast({
+            type: 'device_name_updated',
+            targetDeviceId: targetDeviceId,
+            customName: customName,
+            deviceNames: Object.fromEntries(deviceNames)
+          });
+          broadcastPeerList();
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: true, deviceNames: Object.fromEntries(deviceNames) }));
+          return;
+        }
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Missing targetDeviceId' }));
+      } catch (err) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Invalid JSON' }));
+      }
+    });
     return;
   }
 
@@ -161,7 +238,9 @@ const server = http.createServer((req, res) => {
     const fileName = decodeURIComponent(rawFileName);
     const mimeType = req.headers['x-file-type'] || 'application/octet-stream';
     const senderName = decodeURIComponent(req.headers['x-sender-name'] || 'Anonymous');
-    const senderClientId = req.headers['x-client-id'] || '';
+    const senderClientId = req.headers['x-client-id'] || req.headers['x-client-tag'] || '';
+    const deviceId = (req.headers['x-device-id'] || req.headers['x-client-id'] || req.headers['x-client-tag'] || '').trim().slice(0, 32);
+    const deviceName = decodeURIComponent(req.headers['x-device-name'] || '');
     const isVoiceNote = req.headers['x-is-voice-note'] === 'true';
     const duration = parseFloat(req.headers['x-voice-duration'] || '0') || 0;
     const fileId = crypto.randomUUID();
@@ -178,7 +257,7 @@ const server = http.createServer((req, res) => {
     req.pipe(writeStream);
 
     writeStream.on('finish', () => {
-      const clientTag = req.headers['x-client-tag'] || req.headers['x-client-id'] || senderClientId || '';
+      const clientTag = req.headers['x-client-tag'] || req.headers['x-client-id'] || senderClientId || deviceId || '';
       const deviceType = req.headers['x-device-type'] || 'unknown';
       const fileMeta = {
         id: fileId,
@@ -188,9 +267,12 @@ const server = http.createServer((req, res) => {
         size: bytesReceived,
         mimeType,
         senderName,
+        deviceId: deviceId,
+        senderDeviceId: deviceId,
         senderClientId: clientTag,
         clientTag: clientTag,
         deviceType: deviceType,
+        deviceName: deviceName,
         isVoiceNote: false,
         duration: 0,
         url: `/api/files/${safeStorageName}`,
@@ -373,7 +455,9 @@ wss.on('connection', (ws, req) => {
   peers.set(ws, {
     id: peerId,
     name: `Peer-${peerId.slice(0, 4)}`,
+    deviceId: '',
     deviceType: 'unknown',
+    deviceName: '',
     ip: remoteIp,
     joinedAt: Date.now(),
     lastSeen: Date.now()
@@ -386,7 +470,8 @@ wss.on('connection', (ws, req) => {
     yourIp: remoteIp,
     peers: Array.from(peers.values()),
     history: messageHistory,
-    clipboard: sharedClipboard
+    clipboard: sharedClipboard,
+    deviceNames: Object.fromEntries(deviceNames)
   }));
 
   ws.on('message', rawMessage => {
@@ -401,21 +486,62 @@ wss.on('connection', (ws, req) => {
         case 'identify':
           if (msg.name) currentPeer.name = msg.name.trim().slice(0, 32);
           if (msg.deviceType) currentPeer.deviceType = msg.deviceType;
-          if (msg.clientId) currentPeer.clientId = msg.clientId;
+          if (msg.deviceName) currentPeer.deviceName = msg.deviceName.trim().slice(0, 48);
+          if (msg.deviceId) currentPeer.deviceId = msg.deviceId.trim().slice(0, 32);
+          if (msg.clientId || msg.clientTag) currentPeer.clientId = msg.clientId || msg.clientTag;
+          if (!currentPeer.deviceId) currentPeer.deviceId = currentPeer.clientId || currentPeer.id;
+          
+          // Authoritative network name override if registered
+          if (deviceNames.has(currentPeer.deviceId)) {
+            currentPeer.name = deviceNames.get(currentPeer.deviceId);
+          }
           broadcastPeerList();
           break;
+
+        case 'set_device_name': {
+          const targetDeviceId = (msg.targetDeviceId || '').trim();
+          const customName = (msg.customName || '').trim().slice(0, 48);
+          if (targetDeviceId) {
+            if (customName) {
+              deviceNames.set(targetDeviceId, customName);
+            } else {
+              deviceNames.delete(targetDeviceId);
+            }
+            persistDeviceNames();
+
+            // Update matching connected peer if online
+            for (const [, peer] of peers) {
+              if (peer.deviceId === targetDeviceId || peer.clientId === targetDeviceId) {
+                peer.name = customName || peer.deviceName || `Peer-${peer.id.slice(0, 4)}`;
+              }
+            }
+
+            broadcast({
+              type: 'device_name_updated',
+              targetDeviceId: targetDeviceId,
+              customName: customName,
+              deviceNames: Object.fromEntries(deviceNames)
+            });
+            broadcastPeerList();
+          }
+          break;
+        }
 
         case 'chat_message':
           if (!msg.text || !msg.text.trim()) return;
           const msgId = msg.id || crypto.randomUUID();
-          const clientTag = msg.clientTag || msg.clientId || currentPeer.clientId || '';
+          const deviceId = msg.deviceId || msg.senderDeviceId || currentPeer.deviceId || msg.clientTag || msg.clientId || '';
+          const clientTag = msg.clientTag || msg.clientId || deviceId;
           const newMsg = {
             id: msgId,
+            deviceId: deviceId,
+            senderDeviceId: deviceId,
             clientTag: clientTag,
             senderId: currentPeer.id,
             senderClientId: clientTag,
             senderName: currentPeer.name,
             deviceType: currentPeer.deviceType,
+            deviceName: currentPeer.deviceName || '',
             text: msg.text.trim().slice(0, 5000),
             timestamp: msg.timestamp || Date.now()
           };

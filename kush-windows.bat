@@ -29,6 +29,16 @@ if "%1"=="--resetlog" (
     exit /b
 )
 
+if "%1"=="--help" (
+    echo Kullanım:
+    echo   kush-windows.bat            : Donanım optimize pencerede başlatır
+    echo   kush-windows.bat --resetlog : Sohbet ve logları sıfırlar
+    pause
+    exit /b
+)
+
 echo Starting kush at %SERVER_URL% ...
-start msedge.exe --app="%SERVER_URL%" 2>nul || start chrome.exe --app="%SERVER_URL%" 2>nul || start "" "%SERVER_URL%"
+set LOW_MEM_FLAGS=--disable-background-networking --disable-sync --disable-extensions --no-default-browser-check --disk-cache-size=10485760
+
+start msedge.exe --app="%SERVER_URL%" %LOW_MEM_FLAGS% 2>nul || start chrome.exe --app="%SERVER_URL%" %LOW_MEM_FLAGS% 2>nul || start "" "%SERVER_URL%"
 exit
